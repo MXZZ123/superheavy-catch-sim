@@ -6,6 +6,15 @@
   const APP = window.APP = { settings: Object.assign({}, SH.DEFAULTS), run: null, ref: null, t: 0, playing: false, locked: false, speed: "auto" };
   const renderer = new SH.Renderer($("view")), charts = new SH.Charts($("charts")), audio = new SH.Audio();
   APP.renderer = renderer;
+  // 3D renderer (three.js); falls back to the 2D canvas renderer when WebGL is unavailable
+  let r3 = null;
+  const qParam = new URLSearchParams(location.search);
+  if (window.THREE && SH.webglOK && qParam.get("view") !== "2d") {
+    try { r3 = new SH.Renderer3D($("viewWrap"), qParam.get("quality") || SH.autoQuality()); if (!r3.ok) r3 = null; } catch (e) { console.warn("3D init failed", e); r3 = null; }
+  }
+  APP.r3 = r3; APP.view = r3 ? "3d" : "2d";
+  const active = () => (APP.view === "3d" && r3 ? r3 : renderer);
+  APP.active = active;
   const V3_ONLY = ["landing_tanks", "vent_mode", "vent_pct"];
 
   // ---------------- settings panel
@@ -20,11 +29,13 @@
       if (tw.type === "range") { inp = document.createElement("input"); inp.type = "range"; inp.min = tw.min; inp.max = tw.max; inp.step = tw.step; }
       else if (tw.type === "select") { inp = document.createElement("select"); for (const o of tw.options) { const op = document.createElement("option"); op.value = o; op.textContent = tw.labels && tw.labels[o] ? tw.labels[o] : o; inp.appendChild(op); } }
       else if (tw.type === "check") { inp = document.createElement("input"); inp.type = "checkbox"; }
+      else if (tw.type === "engines") { inp = document.createElement("input"); inp.type = "hidden"; }
       else { inp = document.createElement("input"); inp.type = "number"; inp.min = tw.min; inp.max = tw.max; inp.step = tw.step; }
       inp.id = "s_" + tw.key;
       const lab = document.createElement("label"); lab.innerHTML = `<span>${tw.label}</span><span class="val"></span>`;
       if (tw.type === "check") { lab.prepend(inp); box.appendChild(lab); } else { box.appendChild(lab); box.appendChild(inp); }
       if (tw.help) { const h = document.createElement("div"); h.className = "help"; h.textContent = tw.help; box.appendChild(h); }
+      if (tw.type === "engines") buildEngineMap(box, tw);
       const onChange = () => {
         let v = tw.type === "check" ? inp.checked : tw.type === "select" ? inp.value : +inp.value;
         if (tw.type === "select" && tw.options.every(o => typeof o === "number")) v = +v;
@@ -35,11 +46,67 @@
     }
     refreshPanel();
   }
+  // ---- clickable 33-engine map (pre-flight): select engines, set failure mode / time / value
+  let engSel = -1;
+  function buildEngineMap(box, tw) {
+    const wrap = document.createElement("div"); wrap.className = "engmap";
+    const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg"); svg.setAttribute("viewBox", "-50 -50 100 100"); svg.setAttribute("class", "engsvg");
+    const ring = document.createElementNS(ns, "circle"); ring.setAttribute("r", 47); ring.setAttribute("class", "engring"); svg.appendChild(ring);
+    for (let i = 0; i < 33; i++) {
+      let a, r; if (i < 3) { a = Math.PI / 2 + i * 2 * Math.PI / 3; r = 0.75; } else if (i < 13) { a = (i - 3) * 2 * Math.PI / 10; r = 2.1; } else { a = (i - 13) * 2 * Math.PI / 20 + Math.PI / 20; r = 3.95; }
+      const g = document.createElementNS(ns, "g"); g.setAttribute("class", "eng"); g.dataset.i = i;
+      const c = document.createElementNS(ns, "circle"); c.setAttribute("cx", (r * Math.cos(a) * 10.2).toFixed(2)); c.setAttribute("cy", (-r * Math.sin(a) * 10.2).toFixed(2)); c.setAttribute("r", i < 13 ? 5.6 : 5.2);
+      const tx = document.createElementNS(ns, "text"); tx.setAttribute("x", c.getAttribute("cx")); tx.setAttribute("y", (+c.getAttribute("cy") + 1.8).toFixed(2)); tx.textContent = i + 1;
+      g.appendChild(c); g.appendChild(tx); svg.appendChild(g);
+      g.addEventListener("click", () => { if (APP.locked) return; engSel = i; refreshEngineMap(); });
+    }
+    wrap.appendChild(svg);
+    const ed = document.createElement("div"); ed.className = "engedit"; ed.innerHTML = `
+      <div class="engsel">Tap an engine (1-3 centre, 4-13 inner gimballed, 14-33 outer fixed)</div>
+      <label>Mode <select id="engMode"><option value="">healthy</option>${Object.entries(SH.ENG_FAIL_MODES).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select></label>
+      <label>At T+ <input id="engT" type="number" min="0" max="320" step="0.5" value="230"> s</label>
+      <label>Value <input id="engVal" type="number" min="0" max="100" step="1" value="50"> <span id="engValU"></span></label>
+      <div class="englist" id="engList"></div><button id="engClear" type="button">Clear all</button>`;
+    wrap.appendChild(ed); box.appendChild(wrap);
+    const apply = () => {
+      if (APP.locked || engSel < 0) return;
+      const list = SH.parseEngFail(APP.settings.eng_fail).filter(f => f.i !== engSel), mode = $("engMode").value;
+      if (mode) list.push({ i: engSel, mode, t: +$("engT").value || 0, val: +$("engVal").value || 0 });
+      list.sort((a, b) => a.i - b.i); APP.settings.eng_fail = SH.encodeEngFail(list); refreshPanel(); markStale();
+    };
+    for (const id of ["engMode", "engT", "engVal"]) ed.querySelector("#" + id).addEventListener("change", apply);
+    ed.querySelector("#engClear").addEventListener("click", () => { if (APP.locked) return; APP.settings.eng_fail = ""; engSel = -1; refreshPanel(); markStale(); });
+  }
+  function refreshEngineMap() {
+    const list = SH.parseEngFail(APP.settings.eng_fail), byI = {}; for (const f of list) byI[f.i] = f;
+    document.querySelectorAll(".engsvg .eng").forEach(g => { const i = +g.dataset.i, f = byI[i]; g.setAttribute("class", "eng" + (f ? " f-" + f.mode : "") + (i === engSel ? " sel" : "")); });
+    const sel = document.querySelector(".engsel"); if (!sel) return;
+    if (engSel >= 0) {
+      const f = byI[engSel]; sel.textContent = `Engine ${engSel + 1} (${engSel < 3 ? "centre" : engSel < 13 ? "inner, gimballed" : "outer, fixed"})`;
+      if (document.activeElement !== $("engMode")) $("engMode").value = f ? f.mode : "";
+      if (f) { $("engT").value = f.t; $("engVal").value = f.val; }
+    }
+    const m = $("engMode").value; $("engValU").textContent = m === "thrust" ? "% thrust lost" : m === "gimbal" ? "° stuck" : "(unused)";
+    $("engList").innerHTML = list.length ? list.map(f => `<span>E${f.i + 1}: ${SH.ENG_FAIL_MODES[f.mode]} @T+${f.t}${f.mode === "thrust" ? ` (${f.val}%)` : f.mode === "gimbal" ? ` (${f.val}°)` : ""}</span>`).join("") : "<i>no engines marked</i>";
+  }
+  // ---- "what changed vs baseline"
+  function renderChanges() {
+    const ch = SH.TWEAKS.filter(tw => String(APP.settings[tw.key]) !== String(tw.def));
+    const el = $("changes");
+    if (!ch.length) { el.innerHTML = "<b>Baseline configuration</b> — nothing changed."; return; }
+    el.innerHTML = `<b>What changed vs baseline (${ch.length})</b><ul>${ch.map(tw => {
+      const v = APP.settings[tw.key];
+      const txt = tw.type === "engines" ? SH.parseEngFail(v).map(f => `E${f.i + 1} ${f.mode}@${f.t}s`).join(", ") : `${fmtVal(tw, tw.def)} → <b>${fmtVal(tw, v)}</b>`;
+      return `<li>${tw.label}: ${txt}</li>`;
+    }).join("")}</ul>`;
+  }
   function refreshPanel() {
+    const v4 = APP.settings.physics_model === "v4";
     for (const tw of SH.TWEAKS) {
       const inp = $("s_" + tw.key), v = APP.settings[tw.key], box = inp.closest(".ctl");
       if (tw.type === "check") inp.checked = !!v; else if (String(inp.value) !== String(v)) inp.value = v;
-      box.querySelector(".val").textContent = tw.type === "check" ? "" : fmtVal(tw, v);
+      box.querySelector(".val").textContent = tw.type === "check" || tw.type === "engines" ? "" : fmtVal(tw, v);
+      box.classList.toggle("v4only", !!tw.v4 && !v4);
       box.classList.toggle("changed", String(v) !== String(tw.def));
       let dis = false;
       if (tw.key === "vent_pct") dis = APP.settings.vent_mode !== "vent some";
@@ -48,7 +115,8 @@
       if (tw.key.startsWith("entry_burn_")) dis = !APP.settings.entry_burn;
       box.classList.toggle("dis", dis); inp.disabled = dis;
     }
-    $("modelTag").textContent = APP.settings.physics_model === "v2" ? "physics v2 (Python-validated)" : "physics v3 · landing tanks · CG shift";
+    $("modelTag").textContent = APP.settings.physics_model === "v2" ? "physics v2 (2D, Python-validated)" : APP.settings.physics_model === "v3" ? "physics v3 (2D) · landing tanks · CG shift" : "physics v4 · 6-DOF 3D";
+    refreshEngineMap(); renderChanges();
   }
   function setSettings(obj) { APP.settings = Object.assign({}, SH.DEFAULTS, obj || {}); refreshPanel(); markStale(); }
   APP.setSettings = setSettings;
@@ -125,7 +193,7 @@
       .then(run => {
         run.settings = settings;
         APP.run = run; APP.t = 0; APP.tEnd = run.log.t[run.log.t.length - 1];
-        renderer.setRun(run, APP.ref); charts.build(run, APP.ref); summaryTable();
+        renderer.setRun(run, APP.ref); if (r3) r3.setRun(run, APP.ref); charts.build(run, APP.ref); summaryTable();
         $("btnPlay").disabled = false; $("scrub").disabled = false; markStale();
         busy(false); APP.playing = true; APP.ended = false; $("btnPlay").textContent = "❚❚";
         return run;
@@ -174,6 +242,12 @@
       ["CG staging → end [m]", `${f(S.cg_staging_m, 2)} → ${f(S.cg_catch_m, 2)}`, R && `${f(R.cg_staging_m, 2)} → ${f(R.cg_catch_m, 2)}`],
       ["Vented [t]", f((S.vented_kg || 0) / 1000, 1), R && f((R.vented_kg || 0) / 1000, 1)],
       ["Peak slosh LOX / CH4 [°]", `${f(S.peak_lox_slosh_deg, 1)} / ${f(S.peak_ch4_slosh_deg, 1)}`, R && `${f(R.peak_lox_slosh_deg, 1)} / ${f(R.peak_ch4_slosh_deg, 1)}`]];
+    if (S.catch_roll_err_deg !== undefined) {   // v4 6-DOF extras
+      const g3 = (X, k, d) => X && X[k] !== undefined ? f(X[k], d) : "–";
+      rows.push(["Offset along c / e [m]", `${g3(S, "catch_offset_c_m", 2)} / ${g3(S, "catch_offset_e_m", 2)}`, R && `${g3(R, "catch_offset_c_m", 2)} / ${g3(R, "catch_offset_e_m", 2)}`],
+        ["Catch roll error [°] · vz [m/s]", `${g3(S, "catch_roll_err_deg", 2)} · ${g3(S, "catch_vz_mps", 2)}`, R && `${g3(R, "catch_roll_err_deg", 2)} · ${g3(R, "catch_vz_mps", 2)}`],
+        ["Peak roll rate [°/s]", g3(S, "peak_roll_rate_dps", 1), R && g3(R, "peak_roll_rate_dps", 1)]);
+    }
     $("summary").innerHTML = `<table><tr><th></th><th>This run</th>${R ? "<th>Reference (pinned)</th>" : ""}</tr>${rows.map(r => `<tr><th>${r[0]}</th><td>${r[1]}</td>${R ? `<td>${r[2]}</td>` : ""}</tr>`).join("")}</table>`;
   }
   $("btnPin").addEventListener("click", () => { if (!APP.run) return; APP.ref = APP.run; renderer.ref = APP.ref; summaryTable(); charts.build(APP.run, APP.ref); $("btnPin").textContent = "Reference pinned ✓"; setTimeout(() => $("btnPin").textContent = "Pin as reference", 1500); });
@@ -182,9 +256,28 @@
   $("btnPlay").addEventListener("click", () => { if (!APP.run) return; if (APP.t >= APP.tEnd) APP.t = 0; APP.playing = !APP.playing; $("btnPlay").textContent = APP.playing ? "❚❚" : "▶"; });
   $("scrub").addEventListener("input", e => { if (!APP.run) return; APP.t = +e.target.value / 1000 * APP.tEnd; APP.snap = true; });
   $("speed").addEventListener("change", e => APP.speed = e.target.value);
-  $("camera").addEventListener("change", e => { renderer.mode = e.target.value; APP.snap = true; });
-  $("transp").addEventListener("change", e => renderer.transparent = e.target.checked);
+  const MODES2D = { follow: "follow", orbit: "close", chase: "follow", onboard: "close", tower: "wide", ground: "wide", below: "close", fins: "fins", wide: "wide", close: "close", tanks: "tanks" };
+  function setCamera(m) { $("camera").value = m; renderer.mode = MODES2D[m] || "follow"; if (r3) r3.mode = ["wide", "close", "tanks"].includes(m) ? (m === "tanks" ? "orbit" : "follow") : m; APP.snap = true; }
+  APP.setCamera = setCamera;
+  $("camera").addEventListener("change", e => setCamera(e.target.value));
+  if (r3) r3.onRequestOrbit = () => { if (APP.view === "3d") setCamera("orbit"); };
+  $("transp").addEventListener("change", e => { renderer.transparent = e.target.checked; if (r3) r3.setTransparent(e.target.checked); });
   $("sound").addEventListener("change", e => { if (e.target.checked) audio.enable(); else audio.disable(); });
+  $("btnViewOpts").addEventListener("click", () => $("viewOpts").classList.toggle("hidden"));
+  function setView(v) {
+    APP.view = v === "3d" && r3 ? "3d" : "2d"; $("viewMode").value = APP.view;
+    document.body.classList.toggle("view3d", APP.view === "3d"); APP.snap = true; onResize();
+    for (const o of $("camera").options) o.hidden = APP.view === "3d" ? o.hasAttribute("data-2d") : false;
+  }
+  APP.setView = setView;
+  $("viewMode").addEventListener("change", e => setView(e.target.value));
+  if (!r3) { $("viewMode").querySelector('option[value="3d"]').disabled = true; $("viewMode").title = "WebGL unavailable — 2D view only"; }
+  $("quality").value = r3 ? r3.quality : "low";
+  $("quality").addEventListener("change", e => { if (r3) r3.setQuality(e.target.value); });
+  $("tod").addEventListener("change", e => { if (r3) r3.setTimeOfDay(e.target.value); });
+  $("hudOff").addEventListener("change", e => { if (r3) r3.hideHud = e.target.checked; renderer.hideHud = e.target.checked; });
+  const volMap = { volMaster: "master", volEngines: "engines", volAero: "aero", volMech: "mech", volEvents: "events" };
+  for (const [id, k] of Object.entries(volMap)) $(id).addEventListener("input", e => audio.setVolume(k, +e.target.value));
   APP.seek = t => { APP.t = t; APP.snap = true; };
   function autoSpeed(S) {
     if (!S) return 1;
@@ -198,17 +291,26 @@
   function frame(now) {
     const dt = Math.min((now - last) / 1000, 0.1); last = now;
     if (APP.run) {
-      const sp = APP.speed === "auto" ? autoSpeed(renderer.S) : +APP.speed;
+      const R = active(), sp = APP.speed === "auto" ? autoSpeed(R.S || renderer.S) : +APP.speed;
       if (APP.playing) {
         APP.t += dt * sp;
         if (APP.t >= APP.tEnd) { APP.t = APP.tEnd; APP.playing = false; if (APP.locked || !APP.ended) finish(); }
       }
-      renderer.draw(APP.t, dt, APP.snap); APP.snap = false;
-      audio.update(renderer.S, APP.playing, sp);
+      R.draw(APP.t, dt, APP.snap); APP.snap = false;
+      if (R.S) audio.update(R.S, APP.playing, sp, audioCtx(R));
       $("scrub").value = Math.round(APP.t / APP.tEnd * 1000); $("tlabel").textContent = `T+${APP.t.toFixed(1)} s`;
       if (now - chartT > 120) { charts.setTime(APP.t); chartT = now; }
-    } else drawIdle();
+    } else if (APP.view === "3d" && r3) r3.drawIdle(now / 1000, APP.settings); else drawIdle();
     requestAnimationFrame(frame);
+  }
+  // listener geometry for spatial audio: camera + booster positions, camera mode (distance delays matter on tower/ground)
+  function audioCtx(R) {
+    if (R === r3 && r3 && r3.booster) {
+      const c = r3.cam, b = r3.booster.group.position;
+      const f = new window.THREE.Vector3(); c.getWorldDirection(f);
+      return { cam: [c.position.x, c.position.y, c.position.z], fwd: [f.x, f.y, f.z], up: [c.up.x, c.up.y, c.up.z], src: [b.x, b.y, b.z], mode: r3.mode, tower: r3.tower.position };
+    }
+    const S = renderer.S; return { cam: [S.xb - 150, S.yb + 30, -200], fwd: [0.6, 0, 0.8], up: [0, 1, 0], src: [S.xb, S.yb, 0], mode: renderer.mode };
   }
   function drawIdle() {
     const c = $("view").getContext("2d"), cv = $("view");
@@ -216,7 +318,7 @@
     c.setTransform(renderer.dpr, 0, 0, renderer.dpr, 0, 0);
     const g = c.createLinearGradient(0, 0, 0, renderer.H); g.addColorStop(0, "#1a3c78"); g.addColorStop(1, "#d79a86"); c.fillStyle = g; c.fillRect(0, 0, renderer.W, renderer.H);
   }
-  const onResize = () => { renderer.resize(); charts.resize(); };
+  const onResize = () => { renderer.resize(); if (r3) r3.resize(); charts.resize(); };
   window.addEventListener("resize", onResize);
   window.addEventListener("orientationchange", () => setTimeout(onResize, 250));
   if (window.ResizeObserver) new ResizeObserver(onResize).observe($("viewWrap"));
@@ -296,5 +398,6 @@
   buildPanel();
   if (location.hash.length > 1) setSettings(decodeSettings(location.hash.slice(1)));
   renderer.resize();
+  setView(APP.view); if (qParam.get("cam")) setCamera(qParam.get("cam"));
   requestAnimationFrame(frame);
 })(window.SH = window.SH || {});

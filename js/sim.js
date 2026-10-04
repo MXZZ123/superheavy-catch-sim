@@ -17,6 +17,7 @@
 
   SH.simulate = function (settings, opts) {
     opts = opts || {};
+    if ((settings && settings.physics_model ? settings.physics_model : SH.DEFAULTS.physics_model) === "v4" && SH.simulate6) return SH.simulate6(settings, opts);
     const p = SH.buildParams(settings);
     const M = SH.makeModel(p);
     const L = M.L, D = M.D; let LCG = M.LCG; const V3 = !!p.v3;
@@ -343,6 +344,7 @@
     return { log: out, events: s.events, outcome, summary, p, settings: Object.assign({}, SH.DEFAULTS, settings || {}), eng_starts: eng.starts, disp: Array.from(eng.disp) };
   };
 
+  SH._classify = (s, log, f) => classify(s, log, f); SH._summarize = (s, log, f) => summarize(s, log, f);
   function classify(s, log, f) {
     const p = s.p, n = log.t.length;
     const last = i => log[i][n - 1];

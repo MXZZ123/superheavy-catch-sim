@@ -110,7 +110,7 @@
       this.drawWindStreaks(S, t);
       this.drawVehicle(S, t);
       this.drawTower(S, t, true);              // arms in front of the booster
-      this.drawHUD(S, t);
+      if (!this.hideHud) this.drawHUD(S, t);
     }
     // ---------- background
     drawSky(S) {

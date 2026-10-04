@@ -370,6 +370,7 @@
       if (G) [h, modes, z1, RTs] = slosh_modes_geom(M, G, this.m, this.rho, this.nu, g_eff);
       else [h, modes, z1] = slosh_modes(M, this.m, this.rho, this.nu, g_eff);
       this.h = h; this.zeta = z1; this.RTs = RTs;
+      this.modes = modes;   // exposed for the v4 second lateral slosh axis (no effect on the 2D models)
       if (this.m <= 1e-3) { this.F = 0; this.tau = 0; this.ms_active = 0; this.wave = 0; this.qs = 0; this.settled = true; this.zp = 0; this.zpd = 0; return; }
       this.zpd += -g_eff * dt;
       this.zp += this.zpd * dt;

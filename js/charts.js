@@ -13,6 +13,12 @@
     { id: "slosh", title: "Slosh angle mode 1 [deg] (main · landing)", s: [["LOX main", "#96d6ff", L => L.lox_psi1.map(v => v / D2R)], ["CH4 main", "#ffaa50", L => L.ch4_psi1.map(v => v / D2R)], ["LOX landing", "#4a9eff", L => L.loxL_psi1.map(v => v / D2R)]] },
     { id: "wind", title: "Wind at vehicle [m/s]", s: [["total", "#80cbc4", L => Array.from(L.wind_x)], ["mean", "#26a69a", L => Array.from(L.wind_mean)], ["gust", "#ffee58", L => Array.from(L.wind_gust)]] },
     { id: "cg", title: "CG station from base [m] · vent [t/s]", s: [["CG", "#e1bee7", L => Array.from(L.cg)], ["vent t/s", "#fff59d", L => L.vent_o.map((v, i) => (v + L.vent_f[i]) / 1000)]] },
+    // v4 (6-DOF) only: skipped when the log lacks the keys
+    { id: "xr", v4: ["z", "dc", "de"], title: "Crossrange z [km] · tower offsets dc/de [m]", s: [["z km", "#90caf9", L => L.z.map(v => v / 1000)], ["dc m", "#a5d6a7", L => L.dc.map(v => Math.max(-200, Math.min(200, v)))], ["de m", "#ffcc80", L => L.de.map(v => Math.max(-200, Math.min(200, v)))]] },
+    { id: "att", v4: ["roll_err", "tilt"], title: "Attitude [deg]: roll error · tilt", s: [["roll err", "#f48fb1", L => Array.from(L.roll_err)], ["tilt", "#b39ddb", L => Array.from(L.tilt)]] },
+    { id: "fins", v4: ["fin0", "fin1", "fin2"], title: "Grid fins A/B/C [deg]", s: [["A", "#4dd0e1", L => Array.from(L.fin0)], ["B", "#ffb74d", L => Array.from(L.fin1)], ["C", "#aed581", L => Array.from(L.fin2)]] },
+    { id: "gimb", v4: ["gx", "gz"], title: "Gimbal pitch/yaw/roll [deg]", s: [["gx", "#ef9a9a", L => Array.from(L.gx)], ["gz", "#80deea", L => Array.from(L.gz)], ["groll", "#fff59d", L => L.groll ? Array.from(L.groll) : L.gx.map(() => 0)]] },
+    { id: "srp", v4: ["srp", "CT"], title: "Retro-propulsion: drag factor · C_T", s: [["drag factor", "#ce93d8", L => Array.from(L.srp)], ["C_T (÷10)", "#ffab91", L => L.CT.map(v => Math.min(v, 100) / 10)]] },
   ];
   class Charts {
     constructor(el) { this.el = el; this.plots = []; this.t = 0; }
@@ -20,12 +26,13 @@
       this.el.innerHTML = ""; this.plots = [];
       const L = run.log, x = Array.from(L.t);
       for (const d of DEFS) {
+        if (d.v4 && !d.v4.every(k => L[k])) continue;
         const box = document.createElement("div"); box.className = "chart"; this.el.appendChild(box);
         const series = [{}], data = [x];
         for (const [nm, col, fn] of d.s) { series.push({ label: nm, stroke: col, width: 1.4, points: { show: false } }); data.push(fn(L)); }
         if (ref) {   // reference run resampled onto this run's time base
           const RL = ref.log, rt = RL.t;
-          for (const [nm, col, fn] of d.s.slice(0, 2)) {
+          if (!d.v4 || d.v4.every(k => RL[k])) for (const [nm, col, fn] of d.s.slice(0, 2)) {
             const ry = fn(RL), out = new Array(x.length);
             let j = 0; for (let i = 0; i < x.length; i++) { while (j < rt.length - 2 && rt[j + 1] < x[i]) j++; out[i] = x[i] > rt[rt.length - 1] ? null : ry[j]; }
             series.push({ label: nm + " (ref)", stroke: col, width: 1, dash: [5, 4], points: { show: false } }); data.push(out);

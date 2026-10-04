@@ -6,6 +6,142 @@ This is a static, client-side web app. The physics, guidance, rendering and UI a
   You can also serve the folder: `python3 -m http.server 8765` and browse to `http://localhost:8765/`.
 * **Workflow:** set the pre-flight configuration on the left, then press **LAUNCH**. The flight is simulated fresh (about 1 s), then played back.
 
+## v4: 6-DOF 3D physics, three.js graphics, plume model, spatial audio (default model)
+
+Live site: https://mxzz123.github.io/superheavy-catch-sim/ . The view defaults to 3D (WebGL). Use `?view=2d` for the old canvas view, and `?quality=low|medium|high` or `?cam=below` to pick quality or camera from the URL.
+
+### Physics (`js/sim6.js`)
+* **Rigid-body 6-DOF.** Position and velocity in 3D, with a quaternion attitude and body rates. The full inertia tensor (Ixx / Iyy roll / Izz) comes from the live mass distribution and includes the off-axis LOX landing tank, so the CG has a lateral offset that the guidance has to trim. Integration uses fixed-step RK-style sub-steps.
+* **Three grid fins (A / B / C)** with per-fin hinge deflection. Allocation is a weighted least-squares mix to pitch / yaw / roll. On saturation the command is scaled uniformly, which keeps its direction (no spurious roll).
+  * The **aerodynamic roll damping of the fins** is modelled: each fin sees an incidence change of `w_y R / V`.
+  * A **stuck fin** is re-allocated around. Roll gets a higher weight when a fin has failed.
+* **Two slosh axes** per tank (pendulum mode 1 in the X and Z planes).
+* **Engines:**
+  * 13-engine gimbal (pitch / yaw) plus differential roll gimbal. Roll uses only the authority left after pitch and yaw; the remainder goes to RCS.
+  * 33 engines are modelled individually, with spool-up/down, start failures and hard starts.
+  * A per-engine failure map is set in the UI (`engines` widget).
+* **Retro-propulsion (SRP) drag.** While the engines face the oncoming flow (boostback at altitude, landing burn), the plume shields the base. Axial drag is multiplied by `max(0.1, 1/(1 + 1.5 C_T))`, with `C_T = T/(q·A_base)`.
+  * Logged as `srp` and `CT`, and shown in the "Retro-propulsion" chart.
+  * It can be turned off with the `srp` tweak.
+* **3D guidance:**
+  * Boostback aims crossrange.
+  * The glide has crossrange AoA steering.
+  * Thrust-line trim points the CG→thrust-centroid line along the command.
+  * Terminal guidance is axis-referenced. The tower has its own heading, closing axis `c` and extension axis `e`.
+  * The command along `c` is frozen while the arms close.
+  * The lateral tilt limit shrinks near the arms.
+  * Hover-hold and arm-close logic.
+* **3D wind:** wind direction, gust direction, crosswind.
+* **Validation (`node tools/validate6.js`)** against the validated v3 2D model. The "planar" variant runs v4 restricted to the pitch plane.
+
+| quantity | v3 2D | v4 planar | v4 full 3D |
+|---|---|---|---|
+| outcome | CAUGHT | CAUGHT | CAUGHT |
+| catch vy / vx [m/s] | −0.31 / −0.31 | −0.47 / −0.39 | −0.35 / −0.38 |
+| catch offset [m] | −0.20 | 0.57 | −0.45 |
+| propellant at end [t] | 20.28 | 19.30 | 19.95 |
+| flight time [s] | 253.2 | 254.0 | 252.7 |
+| apogee [km] / max-Q [kPa] / peak g | 96.47 / 176.8 / 9.48 | 96.47 / 176.9 / 9.48 | 96.23 / 176.4 / 9.48 |
+| landing ignition alt [m] | 2533.5 | 2533.5 | 2517.4 |
+| boostback [s] / peak LOX slosh [°] / vented [t] | 33.63 / 34.3 / 7.53 | 33.63 / 34.3 / 7.53 | 33.64 / 34.3 / 7.83 |
+| catch roll error [°] / peak roll rate [°/s] | – | 0.61 / 4.3 | 0.72 / 6.2 |
+
+How well the models agree:
+* **Ascent, boostback, entry and landing ignition** agree to about 0.01 %.
+* **The terminal phase differs.** v4 has its own 3D terminal guidance (axis-referenced divert and arm-closing logic), so the catch numbers differ by tens of cm.
+* **Roll in the planar run** comes from asymmetric engine spool-up and gimbal cross-coupling. A 2D model cannot represent it.
+
+**Scenario suite.** Run `node tools/scen6.js` (v4).
+* **Caught:**
+  * baseline
+  * don't vent
+  * 1 or 2 engines out in the landing burn
+  * centre engine out in the hover-slam
+  * 2 engines out in boostback
+  * 2 relight failures
+  * high-AoA −12°
+  * entry burn
+  * 250 tf Raptors
+  * heavy booster
+  * no lag compensation
+  * sluggish arms
+  * roll offset 40°
+  * crossrange +3 km
+  * tower rotated 35°
+  * hard start + stuck gimbal
+* **Soft splashdown:** ocean mission and boostback abort.
+* **Failures:**
+
+| scenario | outcome | why (honest physics) |
+|---|---|---|
+| no landing tanks | gas-ingestion flameout | main-tank residuals slosh off the outlet, same as v3 |
+| low propellant (300 t) | out of propellant | |
+| stuck belly fin B (+10°) | out of propellant | B is the only fin that produces pitch moment, so pitch authority is lost and the booster arrives ~3 km off the tower |
+| stuck side fin A (−15°) | missed the arms | big roll/yaw disturbance; the free fins and RCS keep it controllable but not on target |
+| windy day, crosswind 90°, wind 135° | too fast / tipped over / missed | v4's strong-wind terminal guidance is a known limitation (v3 caught these because it has no out-of-plane wind) |
+| 0.7× landing tank | too fast onto the arms | |
+
+### 3D graphics (`js/render3d.js`, `js/booster3d.js`, `js/plume3d.js`, `js/envmap3d.js`)
+* **Booster.** Real geometry, matched against 10 reference photos / renders: `screenshots/v4_compare_booster_refs.png`, produced by `tools/lab/booster.html` + `tools/labshot.js` + `tools/compose_compare.py`.
+  * **Hull:** brushed stainless (physical material with anisotropy, ring welds every 1.83 m, short staggered seams, rivet dots, heat tint at the aft end, soot under the fins).
+  * **Environment map:** procedural, with azimuthal structure, so the hull shows vertical highlight streaks.
+  * **Crown:** tubular V-strut crown with black forked clamp feet, a thin top ring and a dimpled dome. Port rings sit below the crown.
+  * **Grid fins:** chunky (1.2 m deep), dark egg-crate fins with deep scalloped teeth, round hinge bosses and a slight droop. The two side fins are high; the belly fin is about 4.3 m lower. This is visual only; the sim keeps one hinge station for all three fins.
+  * **Side details:** a pointed pod with a clamped conduit, and the ribbed vent band.
+  * **Chines:** faceted, quilted, proud of the hull, with pointed tops and wedge fairings into the black aft band.
+  * **Aft end:** a black triangular plate with the hazard placard, under a large access port.
+  * **Engines:** 33 charcoal Raptor 3 bells with light rims and white numbers. The inner 13 gimbal live from the sim. A dense black plumbing/manifold ring sits above the bells.
+  * **Live state:** frost bands follow the tank levels. Transparency mode shows the tanks and the sloshing liquids, clipped by the live slosh angles, plus the CG marker.
+* **Scene:**
+  * Starbase-like scene: lattice tower with carriage, chopsticks (driven by `arm_gap`), QD arm, OLM and pad.
+  * Sand, beach, surf and animated sea; sky dome that fades to black space with altitude; stars; time of day (day / morning / sunset / night).
+  * Trajectory trail, re-entry plasma sheath, and steam/dust particles where the plume hits the ground, deck or water.
+* **Cameras:** follow, orbit (touch), chase, onboard, tower, ground, below, fins.
+* **Quality presets:**
+
+| preset | DPR | anti-aliasing | bloom | shadows | particles | notes |
+|---|---|---|---|---|---|---|
+| low | 1 | off | off | off | 160 | auto-selected on phones / coarse pointers |
+| medium | 1.5 | on | on | off | 420 | |
+| high | 2 | on | on | on | 900 | |
+
+### Plume model (`js/plume3d.js`, `SH.plumePhys`), driven by the sim
+* **Per-engine jets:** every lit engine has its own jet, with thrust fraction `f = spool·throttle`. Start and shutdown transients come straight from the spool model and show as orange (start) and green (shutdown) flashes.
+* **Expansion with altitude:**
+  * Exit pressure is `p_e = 0.8 bar · f`.
+  * The jet is bounded by the ambient pressure plus the free-stream confinement (`p_a + 0.6 q` while flying forward), giving `n = p_e/p_b`.
+  * It expands to the pressure-matched radius `r_eq = R_e n^(1/2.4)`, then spreads slowly. Result: narrow and collimated at sea level, ballooning and dimming with altitude.
+* **Shock diamonds** use Prandtl–Pack spacing `1.1 D_e √n`. They are visible for 0.15 < n < 6 and fade downstream.
+* **Visible length** is `(36 + 44 f)(1 + 0.5 log10(1+n))` m.
+* **Retro-propulsion:** the terminal shock stands off at `L/(1 + q/(8 kPa·f))`, and the plume end is flattened and folded back around the vehicle. The sim's SRP drag uses the matching `C_T`.
+* **Merging:** neighbouring jets touch at `x_m = (pitch − D_e)/(2 tan θ)`. With many engines lit, a combined cluster plume takes most of the light.
+* **Base-heating glow** at altitude scales with `(n_lit/33) f (1 − p_a/p0)²`.
+* **Rendering:**
+  * Instanced additive cone layers in a white-yellow core plus a pink → magenta → violet methalox afterglow, with a dusky mauve far trail at altitude.
+  * View-dependent volume thickness and fbm turbulence that streams downstream.
+  * Camera-facing exit flares: the ring of 33 white points seen from below.
+  * Bloom.
+* **Comparison against the user's two references:** `screenshots/v4_compare_plume_refs.png`, made with `tools/lab/plume.html` and `tools/plumeshot.js`. The views are `below` (33 engines at about 35 km), `landing` (3 engines), `retro` (13-engine ignition at q = 40 kPa) and `sea`.
+
+### Audio (`js/audio.js`)
+* **Spatial sources:** each source goes through a delay line (distance / 343 m/s, which gives late arrival and Doppler) and an HRTF panner (equal-power on mobile).
+* **Volume:** buses for engines, aero, mechanical and events, with sliders under ⚙ View.
+* **Sound sources:**
+  * three engine groups (rumble / roar / crackle, scaled by throttle × ambient pressure)
+  * ignition pops
+  * a delayed sonic boom
+  * aero rush and vent hiss
+  * grid-fin actuator whine
+  * slosh thumps and structural creaks
+  * chopstick hydraulics and the catch clank
+  * wind at the listener
+
+### Tinkering UI (still pre-flight only)
+* The 33-engine failure-map editor (mode / time / value per engine).
+* A "What changed vs baseline" panel.
+* v4-only tweaks: wind direction, gust direction, tower heading, crossrange, roll offset, stuck fin, SRP, landing-tank size, and others.
+* v4 charts: crossrange and tower offsets, attitude, fins, gimbal, and retro-propulsion. The summary shows offsets along c/e, roll error and peak roll rate.
+
 ## Pre-flight only: no in-flight tinkering
 * Every tweakable is a pre-flight setting. Pressing LAUNCH locks the whole settings panel (it is greyed out, ignores pointer input, and Launch, Presets, Reset and Monte Carlo are disabled) for the length of the flight.
   Playback controls stay live: pause, scrub, speed, camera, transparency and sound.
@@ -23,6 +159,9 @@ This is a static, client-side web app. The physics, guidance, rendering and UI a
 | `js/charts.js` | uPlot charts with a playback cursor and a reference-run overlay |
 | `js/audio.js` | Procedural WebAudio |
 | `js/ui.js` | Panel, lock, presets, share URL, launch, playback, outcome card, compare, Monte Carlo |
+| `js/sim6.js` | v4 6-DOF simulation (quaternion attitude, inertia tensor, 3 fins, 2-axis slosh, 3D guidance, SRP drag) |
+| `js/render3d.js` / `booster3d.js` / `plume3d.js` / `envmap3d.js` | three.js scene, booster model, sim-driven plumes, procedural environment map |
+| `vendor/three.bundle.min.js` | vendored three.js (+ OrbitControls, EffectComposer, UnrealBloom, mergeGeometries) |
 | `tools/` | Node and Playwright tooling (see Testing) |
 
 ### Physics models
@@ -226,12 +365,19 @@ Presets include Baseline v3, Don't vent, No landing tanks, the v2 model, engine-
 Details are in `tools/validation.json`.
 
 ## Testing
+* `node tools/validate6.js` runs the v4 vs v3 validation table. `node tools/scen6.js [v4|v3] [regex]` runs every preset.
+* `node tools/v4shots.js [url]` runs Playwright with SwiftShader WebGL. It covers 6 scenarios through the UI, the camera set, transparency, the engine map, view options, and iPhone 13 / Pixel 7 emulation with an FPS measurement. It writes `screenshots/v4_*.png` and `screenshots/v4_results.json`.
+* `node tools/labshot.js` / `node tools/plumeshot.js` render the booster and plume comparison labs. `node tools/appcheck.js` loads the whole app and reports console errors.
 * `node tools/scenarios.js`: about 30 scenarios headless, about 2 s each.
 * `node tools/v3check.js '{"vent_mode":"don\'t vent"}' "190,232,240"`: event log plus state probes.
 * `node tools/shots.js [url]`: Playwright at 1280×800. It runs baseline / 2-engines-out / high-AoA / don't-vent / no-landing-tanks, the lock test, compare, the share URL and Monte Carlo, and writes `screenshots/*.png` and `screenshots/results.json`.
 
 ## Known limitations / not modelled
-* The model is 2-D (pitch plane only). Out-of-plane effects are not modelled: the side-mounted landing tank's lateral CG, roll, and the third grid fin's role.
+* **v3 is 2-D (pitch plane only).** v4 adds the out-of-plane effects: the lateral CG from the side-mounted landing tank, roll, and the role of the third grid fin.
+* **v4 strong-wind and crosswind terminal guidance is weak.** The windy day, crosswind 90° and wind 135° presets fail.
+* **The v4 terminal phase differs from v3 by tens of cm** because it uses different guidance.
+* **The plume, steam and dust are physically motivated visual approximations, not CFD.** The SRP drag factor is a simple C_T correlation.
+* **Grid-fin heights:** the 3D model draws the belly fin lower, but the sim uses one hinge station for all three fins.
 * Tank pressurisation, autogenous pressure collapse, boil-off and geysering are not modelled. Gas ingestion uses a simple level/slosh criterion.
 * Landing-tank sizes, isolation-valve placement and timing, vent rates and vent thrust are estimates. Treat them as plausible, not as SpaceX data.
 * The slosh model is an equivalent-pendulum (SP-106 / Dodge) approximation applied to domed and annular geometry. It is not CFD.

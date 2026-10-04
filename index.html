@@ -8,7 +8,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="description" content="Super Heavy booster return-to-launch-site and chopstick catch simulator (Block 3, v3 physics).">
+<meta name="description" content="Super Heavy booster return-to-launch-site and chopstick catch simulator (Block 3, 6-DOF 3D physics, three.js).">
 <link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -32,6 +32,7 @@
     </div>
     <div id="lockBanner" class="hidden">🔒 PRE-FLIGHT SETTINGS LOCKED — flight in progress.<br><small>Playback controls stay live. End the flight to change settings.</small></div>
     <div id="staleBanner" class="hidden">Settings changed since the last flight — results below belong to the previous configuration. Launch a fresh run.</div>
+    <div id="changes" class="changes"></div>
     <div id="panel"></div>
     <div class="side-bottom">
       <button id="btnLaunch" class="primary">▶ LAUNCH</button>
@@ -59,9 +60,21 @@
       <input id="scrub" type="range" min="0" max="1000" value="0" step="1" disabled>
       <span id="tlabel">T+0.0 s</span>
       <label>Speed <select id="speed"><option value="auto" selected>Auto</option><option>0.5</option><option>1</option><option>2</option><option>5</option><option>10</option><option>20</option></select></label>
-      <label>Camera <select id="camera"><option value="follow">Follow</option><option value="wide">Wide</option><option value="close">Close-up</option><option value="tanks">Tanks (internals)</option><option value="fins">Grid-fin close-up</option></select></label>
+      <label>Camera <select id="camera"><option value="follow">Follow</option><option value="orbit">Orbit (drag / pinch)</option><option value="chase">Chase</option><option value="onboard">Onboard</option><option value="tower">Tower cam</option><option value="ground">Ground (2.6 km)</option><option value="below">From below</option><option value="fins">Grid-fin close-up</option><option value="wide" data-2d>Wide (2D)</option><option value="close" data-2d>Close-up (2D)</option><option value="tanks" data-2d>Tanks (2D)</option></select></label>
       <label class="chk"><input type="checkbox" id="transp"> Transparent</label>
       <label class="chk"><input type="checkbox" id="sound"> Sound</label>
+      <button id="btnViewOpts" aria-label="View and audio options">⚙ View</button>
+      <div id="viewOpts" class="hidden">
+        <label>View <select id="viewMode"><option value="3d">3D</option><option value="2d">2D</option></select></label>
+        <label>Quality <select id="quality"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+        <label>Time of day <select id="tod"><option value="day">Day</option><option value="morning">Morning</option><option value="sunset">Sunset</option><option value="night">Night</option></select></label>
+        <label class="vol">Master <input type="range" id="volMaster" min="0" max="1" step="0.05" value="0.8"></label>
+        <label class="vol">Engines <input type="range" id="volEngines" min="0" max="1.5" step="0.05" value="1"></label>
+        <label class="vol">Aero / wind <input type="range" id="volAero" min="0" max="1.5" step="0.05" value="1"></label>
+        <label class="vol">Mechanical <input type="range" id="volMech" min="0" max="1.5" step="0.05" value="1"></label>
+        <label class="vol">Booms / events <input type="range" id="volEvents" min="0" max="1.5" step="0.05" value="1"></label>
+        <label class="chk"><input type="checkbox" id="hudOff"> Hide HUD</label>
+      </div>
     </div>
     <div id="lower">
       <div id="lowerRow"><div id="summary"></div><div id="charts"></div></div>
@@ -70,11 +83,17 @@
   </main>
 </div>
 <script src="vendor/uPlot.iife.min.js"></script>
+<script src="vendor/three.bundle.min.js"></script>
 <script src="js/params.js"></script>
 <script src="js/physics.js"></script>
 <script src="js/guidance.js"></script>
 <script src="js/sim.js"></script>
+<script src="js/sim6.js"></script>
 <script src="js/render.js"></script>
+<script src="js/envmap3d.js"></script>
+<script src="js/booster3d.js"></script>
+<script src="js/plume3d.js"></script>
+<script src="js/render3d.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/ui.js"></script>

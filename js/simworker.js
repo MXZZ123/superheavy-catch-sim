@@ -1,7 +1,7 @@
 /* Web Worker: runs SH.simulate off the main thread so the UI (and phone browsers) never freeze.
    Loaded with a relative URL, so it works under any GitHub Pages sub-path. */
 self.window = self;
-importScripts("params.js", "physics.js", "guidance.js", "sim.js");
+importScripts("params.js", "physics.js", "guidance.js", "sim.js", "sim6.js");
 self.onmessage = (e) => {
   const { id, settings } = e.data;
   try {
