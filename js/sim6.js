@@ -84,7 +84,7 @@
     const EP = [], EPHI = [];
     for (let i = 0; i < 33; i++) {
       let ang, rad;
-      if (i < 3) { ang = Math.PI / 2 + i * 2 * Math.PI / 3; rad = p.r_eng_centre_m; }
+      if (i < 3) { ang = [90, 198, -18][i] * D2R; rad = Math.max(p.r_eng_centre_m, 0.82); }   // Block 3 centre clocking 108/108/144 deg
       else if (i < 13) { ang = (i - 3) * 2 * Math.PI / 10; rad = p.r_eng_inner_m; }
       else { ang = (i - 13) * 2 * Math.PI / 20 + Math.PI / 20; rad = p.r_eng_outer_m; }
       EP.push([rad * Math.cos(ang), 0, rad * Math.sin(ang)]); EPHI.push(ang);
@@ -750,7 +750,7 @@
       const aB = p.landing_decel_B, hpc = Math.max(s.hp, 0.0);
       let v_cmd = -(0.3 + Math.min(Math.sqrt(2 * aB * hpc), 0.6 * hpc));
       let a_ff = Math.sqrt(2 * aB * hpc) < 0.6 * hpc ? aB : 0.6 * 0.6 * hpc;
-      if (!s.target.ocean && s.arm_t0 === null && s.hp < 30 && (s.dhor > 4.0 || Math.abs(s.de) > 2.5)) {
+      if (!s.target.ocean && s.arm_t0 === null && s.hp < 30 && (s.dhor > 4.0 || Math.abs(s.de) > 2.5 || Math.abs(s.vx * s.eax[0] + s.vz * s.eax[2]) > 1.2)) {
         const vh = s.hp > 8 ? -1.0 : 0.0;
         if (v_cmd < vh) { v_cmd = vh; a_ff = 0; }
         if (!s.hover_hold_logged) { s.hover_hold_logged = true; s.events.push([t, `Hover-hold: ${s.dhor.toFixed(1)} m off axis, translating before closing arms`]); }
@@ -761,13 +761,15 @@
       const dXY = Math.hypot(dX, dZ);
       const vmax = dXY < 40 ? 5.0 : Math.min(5.0 + (dXY - 40) / 8, 25.0);
       let vx_des = -dX / 4.0 * G, vz_des = -dZ / 4.0 * G; const vd = Math.hypot(vx_des, vz_des); if (vd > vmax) { vx_des *= vmax / vd; vz_des *= vmax / vd; }
-      let ax_c = (vx_des - s.vx) / 3.0 - s.aero_ax, az_c = (vz_des - s.vz) / 3.0 - s.aero_az;
+      const tauV = 3.0;   // firmer velocity tracking in the last 120 m (arrive slow along the arms)
+      let ax_c = (vx_des - s.vx) / tauV - s.aero_ax, az_c = (vz_des - s.vz) / tauV - s.aero_az;
       if (s.arm_gap < 7.0) {   // arms closing: stop pushing along the closing axis (bumpers centre it), keep damping along the arms
         const ac = ax_c * s.cax[0] + az_c * s.cax[2]; ax_c -= ac * s.cax[0]; az_c -= ac * s.cax[2];
         const ve = s.vx * s.eax[0] + s.vz * s.eax[2], ae = clip((clip(-((s.axX - s.target.x) * s.eax[0] + (s.axZ - s.target.z) * s.eax[2]) / 4.0, -1.0, 1.0) - ve) / 2.0, -0.6, 0.6) - (s.aero_ax * s.eax[0] + s.aero_az * s.eax[2]) - (ax_c * s.eax[0] + az_c * s.eax[2]);
         ax_c += ae * s.eax[0]; az_c += ae * s.eax[2];
       }
-      const lim = ay_c * Math.tan((vmax > 5 ? 15 : s.hp < 10 ? 2.5 + 0.55 * Math.max(s.hp, 0) : 8) * D2R), ah = Math.hypot(ax_c, az_c);   // stand up straight for the last metres if (ah > lim) { ax_c *= lim / ah; az_c *= lim / ah; }
+      const lim = ay_c * Math.tan((vmax > 5 ? 15 : s.hp < 10 ? 2.5 + 0.55 * Math.max(s.hp, 0) : 8) * D2R), ah = Math.hypot(ax_c, az_c);   // stand up straight for the last metres
+      if (ah > lim) { ax_c *= lim / ah; az_c *= lim / ah; }
       setAxis(ax_c, ay_c, az_c); s.F_req = s.m * Math.hypot(ax_c, ay_c, az_c);
       const runN = eng.available(set3).filter(i => eng.state[i] === SH.ENG.RUNNING);
       let Tmin = 0; for (const i of runN) Tmin += eng.disp[i] * s.Tmax1 * p.throttle_min;
@@ -785,7 +787,7 @@
         return;
       }
       if (s.arm_t0 === null && s.hp < p.arm_close_hp) {
-        if (s.dhor < 6.0 && Math.abs(s.de) < 3.0 && Math.hypot(s.vx, s.vz) < 4.0) { s.arm_t0 = t; s.events.push([t, "Chopsticks closing"]); }
+        if (s.dhor < 6.0 && Math.abs(s.de) < 3.0 && Math.hypot(s.vx, s.vz) < 4.0 && Math.abs(s.vx * s.eax[0] + s.vz * s.eax[2] + 0.5 * Math.sign(s.de) * Math.min(Math.abs(s.de), 2)) < 0.9) { s.arm_t0 = t; s.events.push([t, "Chopsticks closing"]); }
         else if (!s.arm_hold_logged) { s.arm_hold_logged = true; s.events.push([t, `Arms held open: booster ${s.dhor.toFixed(1)} m off axis`]); }
       }
       const offC = Math.abs(s.dc), offE = Math.abs(s.de);

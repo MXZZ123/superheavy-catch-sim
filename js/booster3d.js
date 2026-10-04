@@ -1,7 +1,7 @@
 /* Super Heavy Block 3 booster as real 3D geometry (three.js, window.THREE).
    Proportions are taken from an orthographic side elevation (12.55 px/m; 72.3 m hull + crown, 9 m diameter):
      hull 0 -> 69.2 m, open hot-stage crown 69.2 -> 72.3 m, grid-fin hinge line ~66.6 m, ribbed vent band 47.5 -> 48.9 m,
-     two aero chines on the side-fin azimuths from ~1.0 m to ~28.3 m (angled tops), black aft skirt -0.6 -> 1.8 m with a
+     four unevenly clocked aero chines on the LOX tank (2 small at +Z +/-72 deg to 23.8 m, 2 large at -Z +/-35 deg to 29.8 m), black aft skirt -0.6 -> 1.8 m with a
      ring of vent panels and a triangular access-hatch emblem, 33 black Raptor 3 bells protruding ~3.7 m below the skirt,
      a raceway down the belly-fin side from the vent band to the skirt, small SpaceX "X" near the bottom.
    Detail pass from close-up photos: tubular silver V-strut crown with black forked clamp feet and a thin top ring over a
@@ -16,7 +16,7 @@
 (function (SH) {
   "use strict";
   const T = window.THREE;
-  const R = 4.5, H_HULL = 69.2, H_TOP = 72.3, FIN_Y = 66.6;
+  const R = 4.5, H_HULL = 69.2, H_TOP = 72.3, FIN_Y = 66.6, D2R = Math.PI / 180, PLACARD_DAZ = -16 * Math.PI / 180;
   SH.B3 = { R, H_HULL, H_TOP, FIN_Y };
 
   // ---------------------------------------------------------------- procedural textures
@@ -229,21 +229,57 @@
     return merge([blk, disc, boss, wedge].map(g => g.toNonIndexed ? g.toNonIndexed() : g));
   }
 
-  // ---------------------------------------------------------------- Raptor 3 engine (lathe) — local: pivot at origin, bell pointing -Y
+  // ---------------------------------------------------------------- Raptor 3 engine — local: gimbal pivot at origin, bell pointing -Y
+  // Thrust-chamber contour from the published Raptor sea-level nozzle data (FAA Starship PEA, Appendix G, table 1):
+  // throat radius 4.362 in (0.111 m), downstream throat radius of curvature 1.309 in, wall angle 32 deg at the tangency
+  // point, 6 deg lip angle, exit diameter 51.226 in (1.301 m), throat-to-exit length 60.06 in (1.526 m) -> area ratio ~34;
+  // bell = quadratic Bezier (Rao thrust-optimised parabola).  Raptor 3 look (SpaceX photos, StarshipGazer cluster shot):
+  // no heat shroud, plumbing integrated into the castings, a compact cylindrical powerhead under a light-grey thrust
+  // puck, one side-mounted fuel turbopump with a single looping hot-gas/fuel line, a ring manifold at the injector head,
+  // a slim regen-cooled chamber and narrow throat neck, then a smooth dark bell with a light-grey exit rim.
+  const RAPTOR = (function () {
+    const ye = -3.55, L = 1.526, yt = ye + L, rt = 0.111, re = 0.6505, rcd = 0.033, tn = 32 * D2R, te = 6 * D2R;
+    const Nx = rcd * Math.sin(tn), Nr = rt + rcd * (1 - Math.cos(tn));
+    const Qx = (re - Nr + Math.tan(tn) * Nx - Math.tan(te) * L) / (Math.tan(tn) - Math.tan(te)), Qr = Nr + Math.tan(tn) * (Qx - Nx);
+    const inner = [];   // (r, y) inner wall from the chamber down to the exit
+    const rc = 0.235, yc1 = yt + 0.30, yc2 = yt + 0.62;   // chamber radius (contraction ~4.5) and cylinder extent
+    inner.push([rc, yc2], [rc, yc1 + 0.04]);
+    for (let k = 0; k <= 6; k++) { const u = k / 6, a = (1 - u) * 30 * D2R; inner.push([rt + (rc - rt) * Math.pow(Math.sin(a / (30 * D2R) * Math.PI / 2), 1.6), yt + 0.30 * Math.sin(a / (30 * D2R) * Math.PI / 2)]); }
+    for (let k = 1; k <= 3; k++) { const a = tn * k / 3; inner.push([rt + rcd * (1 - Math.cos(a)), yt - rcd * Math.sin(a)]); }
+    for (let k = 1; k <= 14; k++) { const u = k / 14, x = (1 - u) * (1 - u) * Nx + 2 * u * (1 - u) * Qx + u * u * L, r = (1 - u) * (1 - u) * Nr + 2 * u * (1 - u) * Qr + u * u * re; inner.push([r, yt - x]); }
+    const wall = (y) => 0.016 + 0.034 * Math.max(0, Math.min(1, (y - ye) / L)) ** 1.5;   // regen jacket thicker near the throat
+    const outerAt = (y) => { for (let i = 1; i < inner.length; i++) { const [r0, y0] = inner[i - 1], [r1, y1] = inner[i]; if ((y <= y0 && y >= y1) || (y >= y0 && y <= y1)) { const f = (y - y0) / ((y1 - y0) || 1); return r0 + (r1 - r0) * f + wall(y); } } return re; };
+    return { ye, yt, rt, re, rc, yc1, yc2, inner, wall, outerAt };
+  })();
   function engineGeometry(q) {
-    const seg = q === "low" ? 14 : 24;
-    const prof = [[0.0, 0.25], [0.42, 0.25], [0.48, 0.05], [0.46, -0.45], [0.34, -0.85], [0.26, -1.05], [0.3, -1.25], [0.42, -1.75], [0.52, -2.4], [0.6, -3.05], [0.645, -3.55], [0.62, -3.56], [0.58, -3.08], [0.5, -2.42], [0.4, -1.78], [0.28, -1.26]];
-    const g = new T.LatheGeometry(prof.map(([r, y]) => new T.Vector2(r, y)), seg);
-    const dome = new T.SphereGeometry(0.42, seg, 6, 0, Math.PI * 2, 0, Math.PI / 2); dome.translate(0, 0.25, 0);
-    const pump = new T.CylinderGeometry(0.16, 0.16, 0.7, 8); pump.translate(0.38, -0.3, 0.1);
-    const pump2 = new T.CylinderGeometry(0.13, 0.13, 0.6, 8); pump2.translate(-0.34, -0.35, -0.12);
-    return merge([g.toNonIndexed(), dome.toNonIndexed(), pump.toNonIndexed(), pump2.toNonIndexed()]);
+    const seg = q === "low" ? 14 : 28, E = RAPTOR, parts = [];
+    // thrust chamber + bell: outer skin top->exit, lip, inner wall exit->chamber (visible from below)
+    const outer = E.inner.map(([r, y]) => [r + E.wall(y), y]);
+    const prof = [[0.0, E.yc2 + 0.02], [E.rc + 0.06, E.yc2 + 0.02]].concat(outer.slice(1), [[E.re + 0.004, E.ye - 0.004]], E.inner.slice().reverse(), [[0.0, E.yc2 - 0.02]]);
+    parts.push(new T.LatheGeometry(prof.map(([r, y]) => new T.Vector2(r, y)), seg));
+    const tor = (rr, tr, y, rs = 6) => { const t = new T.TorusGeometry(rr, tr, rs, seg); t.rotateX(Math.PI / 2); t.translate(0, y, 0); return t; };
+    // slim regen coolant manifold ring part-way down the otherwise smooth bell
+    const ym = E.yt - 0.5; parts.push(tor(E.outerAt(ym) + 0.008, 0.02, ym));
+    // injector-head ring manifold (hot-gas) + collar
+    const yi = E.yc2 + 0.1; parts.push(tor(0.3, 0.085, yi, 8));
+    const col = new T.CylinderGeometry(0.27, 0.3, 0.16, seg); col.translate(0, yi + 0.12, 0); parts.push(col);
+    // powerhead: oxidiser turbopump + preburner stack (compact cylinder with two collars) under the thrust puck
+    const ph = new T.CylinderGeometry(0.235, 0.26, 0.62, seg); ph.translate(0, yi + 0.5, 0); parts.push(ph);
+    parts.push(tor(0.255, 0.03, yi + 0.36, 4)); parts.push(tor(0.245, 0.03, yi + 0.66, 4));
+    const yp = yi + 0.86, puck = new T.CylinderGeometry(0.31, 0.25, 0.14, seg); puck.translate(0, yp, 0); parts.push(puck);
+    const gb = new T.CylinderGeometry(0.12, 0.14, 0.5, 10); gb.translate(0, yp + 0.3, 0); parts.push(gb);   // gimbal block
+    // side fuel turbopump + preburner (one side) and its single looping duct into the injector manifold
+    const fp = new T.CylinderGeometry(0.13, 0.115, 0.58, 12); fp.translate(0.36, yi + 0.42, 0.08); parts.push(fp);
+    const loop = new T.TorusGeometry(0.2, 0.05, 6, 12, Math.PI); loop.rotateY(-0.2); loop.translate(0.3, yi + 0.06, 0.06); parts.push(loop);
+    return merge(parts.map(g => g.index ? g.toNonIndexed() : g));
   }
-  function rimGeometry(q) { const t = new T.TorusGeometry(0.635, 0.035, 4, q === "low" ? 14 : 28); t.rotateX(Math.PI / 2); t.translate(0, -3.55, 0); return t; }
+  function rimGeometry(q) { const t = new T.TorusGeometry(RAPTOR.re + 0.006, 0.028, 5, q === "low" ? 16 : 32); t.rotateX(Math.PI / 2); t.translate(0, RAPTOR.ye + 0.01, 0); return t; }
+  // Block 3 engine layout: 3 centre (clocked 108 / 108 / 144 deg, NSF May 2025: "no single engine directly hits the top of
+  // the ridge cap"), 10 inner gimballed, 20 outer fixed.  Rings sized so the 1.30 m bells just clear each other.
   SH.ENGINE_POS = (function () {
-    const out = [];
+    const out = [], CA = [90, 198, -18];
     for (let i = 0; i < 33; i++) {
-      let a, r; if (i < 3) { a = Math.PI / 2 + i * 2 * Math.PI / 3; r = 0.75; } else if (i < 13) { a = (i - 3) * 2 * Math.PI / 10; r = 2.1; } else { a = (i - 13) * 2 * Math.PI / 20 + Math.PI / 20; r = 3.95; }
+      let a, r; if (i < 3) { a = CA[i] * D2R; r = 0.82; } else if (i < 13) { a = (i - 3) * 2 * Math.PI / 10; r = 2.12; } else { a = (i - 13) * 2 * Math.PI / 20 + Math.PI / 20; r = 3.95; }
       out.push([r * Math.cos(a), r * Math.sin(a)]);
     }
     return out;
@@ -285,7 +321,7 @@
       g.add(new T.Mesh(merge(tabs), M.black));
       // small round port rings just below the crown and the big access port above the aft placard
       { const ports2 = [];
-        for (const [a, y, d] of [[-Math.PI / 2 - 0.55, 67.9, 0.9], [-Math.PI / 2 + 0.35, 67.9, 0.9], [-Math.PI / 2 + 0.75, 67.6, 0.75], [Math.PI / 2 + 0.6, 67.9, 0.9], [Math.PI / 2 - 0.7, 67.7, 0.8], [0.6, 67.9, 0.8], [Math.PI - 0.6, 67.9, 0.8], [-Math.PI / 2, 4.15, 2.0]]) {
+        for (const [a, y, d] of [[-Math.PI / 2 - 0.55, 67.9, 0.9], [-Math.PI / 2 + 0.35, 67.9, 0.9], [-Math.PI / 2 + 0.75, 67.6, 0.75], [Math.PI / 2 + 0.6, 67.9, 0.9], [Math.PI / 2 - 0.7, 67.7, 0.8], [0.6, 67.9, 0.8], [Math.PI - 0.6, 67.9, 0.8], [-Math.PI / 2 - PLACARD_DAZ, 4.15, 2.0]]) {
           const pl = new T.PlaneGeometry(d, d, 6, 1), ps = pl.attributes.position;
           for (let i = 0; i < ps.count; i++) { const x = ps.getX(i), aa = x / R; ps.setXYZ(i, (R + 0.02) * Math.sin(aa), ps.getY(i), (R + 0.02) * Math.cos(aa)); }
           pl.computeVertexNormals(); pl.rotateY(Math.PI / 2 - a); pl.translate(0, y, 0); ports2.push(pl);
@@ -311,23 +347,29 @@
       const slots = [], NS = q === "low" ? 40 : 72;
       for (let k = 0; k < NS; k++) { const a = k / NS * Math.PI * 2; slots.push(boxAt(0.08, (b1 - b0) * 0.72, 0.16, (R + 0.07) * Math.cos(a), (b0 + b1) / 2, (R + 0.07) * Math.sin(a), -a)); }
       g.add(new T.Mesh(merge(slots), M.slot));
-      // chines: tall flat faceted strakes on the side-fin azimuths (+X / -X) with pointed angled tops, quilted / dimpled
-      // standoff panels, and faceted wedge fairings at the bottom running down into the black aft band
-      const cy0 = -0.4, cy1 = 28.3, rb0 = R - 0.15;
-      const chS = new T.Shape(); [[rb0, -0.75], [R + 0.75, -0.7], [R + 1.4, -0.36], [R + 1.4, 0.36], [R + 0.75, 0.7], [rb0, 0.75]].forEach(([x, y], i) => i ? chS.lineTo(x, y) : chS.moveTo(x, y)); chS.closePath();
+      // chines (Block 3 / V3): FOUR quilted strakes on the LOX tank, clocked unevenly and mirror-symmetric about the
+      // belly-fin / tower plane: two smaller, shorter chines ~144 deg apart straddling the belly-fin (+Z) side at
+      // +Z +/-72 deg, and two considerably larger, taller COPV chines only ~70 deg apart on the tower-facing (-Z) side at
+      // -Z +/-35 deg (gaps 144 / 73 / 70 / 73 deg).  Azimuths fitted to the Starbase rollout, night and launch-mount photos
+      // (+/-10-15 deg); sizes from the photos.  Each has a pointed angled top and a faceted wedge fairing into the aft band.
+      const cy0 = -0.4, rb0 = R - 0.15;
       M.quilt.map.repeat.set(0.45, 0.45); M.quilt.bumpMap.repeat.set(0.45, 0.45);
-      for (const s of [1, -1]) {
+      const CHINES = [   // [azimuth (rad, atan2(z,x)), top y (m), outward reach beyond R (m), half-width (m)]
+        [Math.PI / 2 - 72 * D2R, 23.8, 1.1, 0.45], [Math.PI / 2 + 72 * D2R, 23.8, 1.1, 0.45],
+        [-Math.PI / 2 + 35 * D2R, 29.8, 1.5, 0.6], [-Math.PI / 2 - 35 * D2R, 29.8, 1.5, 0.6]];
+      this.chineAz = CHINES.map(c => c[0]);
+      for (const [az, cy1, reach, hw] of CHINES) {
+        const chS = new T.Shape(); [[rb0, -hw], [R + 0.54 * reach, -hw * 0.94], [R + reach, -hw * 0.48], [R + reach, hw * 0.48], [R + 0.54 * reach, hw * 0.94], [rb0, hw]].forEach(([x, y], i) => i ? chS.lineTo(x, y) : chS.moveTo(x, y)); chS.closePath();
         const cg = new T.ExtrudeGeometry(chS, { depth: cy1 - cy0, steps: 40, bevelEnabled: false }); cg.rotateX(-Math.PI / 2); cg.translate(0, cy0, 0);
-        const ps = cg.attributes.position;
+        const ps = cg.attributes.position, topL = 3.0 + 1.6 * reach;
         for (let i = 0; i < ps.count; i++) {
           const x = ps.getX(i), y = ps.getY(i), z = ps.getZ(i);
-          const tTop = Math.min(Math.max((y - (cy1 - 4.2)) / 4.2, 0), 1);            // pointed top: depth and width -> 0
+          const tTop = Math.min(Math.max((y - (cy1 - topL)) / topL, 0), 1);            // pointed top: depth and width -> 0
           const tBot = Math.min(Math.max((cy0 + 2.6 - y) / 2.6, 0), 1);              // bottom wedge fairing: angled facets
           const kd = (1 - tTop) * (1 - 0.72 * tBot), kw = (1 - 0.85 * tTop) * (1 - 0.25 * tBot);
           ps.setXYZ(i, rb0 + (x - rb0) * kd, y, z * kw);
         }
-        cg.computeVertexNormals();
-        if (s < 0) cg.rotateY(Math.PI);
+        cg.computeVertexNormals(); cg.rotateY(-az);
         g.add(new T.Mesh(cg, M.quilt));
       }
       // raceway down the +Z side (belly-fin side) from the vent band to the skirt, with clamps
@@ -361,7 +403,8 @@
       const hz = new T.Shape(); hz.moveTo(-1.25, 0); hz.lineTo(1.25, 0); hz.lineTo(0, 2.1); hz.closePath();
       const hatch = new T.ExtrudeGeometry(hz, { depth: 0.08, bevelEnabled: false });
       M.placard.map.repeat.set(1 / 2.5, 1 / 2.1); M.placard.map.offset.set(0.5, 0);
-      const hm = new T.Mesh(hatch, [M.placard, M.black]); hm.rotation.y = Math.PI; hm.position.set(0, 0.55, -(R + 0.14)); g.add(hm);
+      const hm = new T.Mesh(hatch, [M.placard, M.black]); hm.rotation.y = Math.PI; hm.position.set(0, 0.55, -(R + 0.14));
+      const hmg = new T.Group(); hmg.rotation.y = PLACARD_DAZ; hmg.add(hm); g.add(hmg);   // ~16 deg off the tower-side centreline, nearer one big chine (aft photo)
       // engines: 20 outer fixed, 13 inner gimballed (pivot at y = -0.75)
       const eg = engineGeometry(q), rg = rimGeometry(q); this.engines = [];
       const numbered = { 13: 15, 15: 19, 17: 1, 19: 5, 21: 200, 24: 30, 26: 18, 29: 387, 31: 9, 8: 22, 5: 11 };
@@ -381,15 +424,15 @@
         const NI = q === "low" ? 10 : 20;
         for (let k = 0; k < NI; k++) { const a = k / NI * Math.PI * 2 + 0.1; pl.push(boxAt(0.26, 0.32, 0.24, 3.0 * Math.cos(a), -0.95, 3.0 * Math.sin(a), -a)); }
         g.add(new T.Mesh(merge(pl), M.plumbing)); }
-      const nozGlow = new T.CircleGeometry(0.6, 20);
+      const nozGlow = new T.CircleGeometry(0.34, 20);
       for (let i = 0; i < 33; i++) {
         const [ex, ez] = SH.ENGINE_POS[i]; const piv = new T.Group(); piv.position.set(ex, -0.75, ez);
         const m = new T.Mesh(eg, M.bell); piv.add(m); piv.add(new T.Mesh(rg, M.rim));
         if (numbered[i] !== undefined && q !== "low") {
           const phi = Math.atan2(ez, ex), nm = new T.Mesh(new T.PlaneGeometry(0.62, 0.31), new T.MeshBasicMaterial({ map: numberTexture(numbered[i]), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
-          nm.position.set(0.555 * Math.cos(phi), -2.55, 0.555 * Math.sin(phi)); nm.rotation.set(0, Math.PI / 2 - phi, 0); nm.rotateX(-0.12); piv.add(nm);
+          const ynum = RAPTOR.ye + 0.55, rn = RAPTOR.outerAt(ynum) + 0.01; nm.position.set(rn * Math.cos(phi), ynum, rn * Math.sin(phi)); nm.rotation.set(0, Math.PI / 2 - phi, 0); nm.rotateX(-0.1); piv.add(nm);
         }
-        const gl = new T.Mesh(nozGlow, M.glowNozzle.clone()); gl.rotation.x = Math.PI / 2; gl.position.y = -3.3; piv.add(gl);   // hot throat seen from below
+        const gl = new T.Mesh(nozGlow, M.glowNozzle.clone()); gl.rotation.x = Math.PI / 2; gl.position.y = RAPTOR.yt - 0.35; piv.add(gl);   // hot throat seen from below
         g.add(piv); this.engines.push({ piv, glow: gl });
       }
       // grid fins (A +X, B +Z, C -X) on hinge blocks; fin pivots about its radial hinge axis

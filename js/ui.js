@@ -53,7 +53,7 @@
     const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg"); svg.setAttribute("viewBox", "-50 -50 100 100"); svg.setAttribute("class", "engsvg");
     const ring = document.createElementNS(ns, "circle"); ring.setAttribute("r", 47); ring.setAttribute("class", "engring"); svg.appendChild(ring);
     for (let i = 0; i < 33; i++) {
-      let a, r; if (i < 3) { a = Math.PI / 2 + i * 2 * Math.PI / 3; r = 0.75; } else if (i < 13) { a = (i - 3) * 2 * Math.PI / 10; r = 2.1; } else { a = (i - 13) * 2 * Math.PI / 20 + Math.PI / 20; r = 3.95; }
+      let a, r; if (i < 3) { a = [90, 198, -18][i] * Math.PI / 180; r = 0.82; } else if (i < 13) { a = (i - 3) * 2 * Math.PI / 10; r = 2.12; } else { a = (i - 13) * 2 * Math.PI / 20 + Math.PI / 20; r = 3.95; }
       const g = document.createElementNS(ns, "g"); g.setAttribute("class", "eng"); g.dataset.i = i;
       const c = document.createElementNS(ns, "circle"); c.setAttribute("cx", (r * Math.cos(a) * 10.2).toFixed(2)); c.setAttribute("cy", (-r * Math.sin(a) * 10.2).toFixed(2)); c.setAttribute("r", i < 13 ? 5.6 : 5.2);
       const tx = document.createElementNS(ns, "text"); tx.setAttribute("x", c.getAttribute("cx")); tx.setAttribute("y", (+c.getAttribute("cy") + 1.8).toFixed(2)); tx.textContent = i + 1;
@@ -256,7 +256,7 @@
   $("btnPlay").addEventListener("click", () => { if (!APP.run) return; if (APP.t >= APP.tEnd) APP.t = 0; APP.playing = !APP.playing; $("btnPlay").textContent = APP.playing ? "❚❚" : "▶"; });
   $("scrub").addEventListener("input", e => { if (!APP.run) return; APP.t = +e.target.value / 1000 * APP.tEnd; APP.snap = true; });
   $("speed").addEventListener("change", e => APP.speed = e.target.value);
-  const MODES2D = { follow: "follow", orbit: "close", chase: "follow", onboard: "close", tower: "wide", ground: "wide", below: "close", fins: "fins", wide: "wide", close: "close", tanks: "tanks" };
+  const MODES2D = { overhead: "wide", follow: "follow", orbit: "close", chase: "follow", onboard: "close", tower: "wide", ground: "wide", below: "close", fins: "fins", wide: "wide", close: "close", tanks: "tanks" };
   function setCamera(m) { $("camera").value = m; renderer.mode = MODES2D[m] || "follow"; if (r3) r3.mode = ["wide", "close", "tanks"].includes(m) ? (m === "tanks" ? "orbit" : "follow") : m; APP.snap = true; }
   APP.setCamera = setCamera;
   $("camera").addEventListener("change", e => setCamera(e.target.value));

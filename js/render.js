@@ -22,7 +22,7 @@
 
   // engine layout (same as physics): centre 3, inner 10, outer 20 -> (x, depth)
   const ENG = []; for (let i = 0; i < 33; i++) {
-    let a, r; if (i < 3) { a = Math.PI / 2 + i * 2 * Math.PI / 3; r = 0.75; } else if (i < 13) { a = (i - 3) * 2 * Math.PI / 10; r = 2.1; } else { a = (i - 13) * 2 * Math.PI / 20 + Math.PI / 20; r = 3.95; }
+    let a, r; if (i < 3) { a = [90, 198, -18][i] * Math.PI / 180; r = 0.82; } else if (i < 13) { a = (i - 3) * 2 * Math.PI / 10; r = 2.12; } else { a = (i - 13) * 2 * Math.PI / 20 + Math.PI / 20; r = 3.95; }
     ENG.push({ x: r * Math.cos(a), d: r * Math.sin(a), ring: i < 3 ? 0 : i < 13 ? 1 : 2 });
   }
   const ENG_ORDER = ENG.map((e, i) => i).sort((a, b) => ENG[b].d - ENG[a].d);   // far first

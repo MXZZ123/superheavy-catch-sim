@@ -88,15 +88,15 @@ How well the models agree:
   * **Crown:** tubular V-strut crown with black forked clamp feet, a thin top ring and a dimpled dome. Port rings sit below the crown.
   * **Grid fins:** chunky (1.2 m deep), dark egg-crate fins with deep scalloped teeth, round hinge bosses and a slight droop. The two side fins are high; the belly fin is about 4.3 m lower. This is visual only; the sim keeps one hinge station for all three fins.
   * **Side details:** a pointed pod with a clamped conduit, and the ribbed vent band.
-  * **Chines:** faceted, quilted, proud of the hull, with pointed tops and wedge fairings into the black aft band.
-  * **Aft end:** a black triangular plate with the hazard placard, under a large access port.
-  * **Engines:** 33 charcoal Raptor 3 bells with light rims and white numbers. The inner 13 gimbal live from the sim. A dense black plumbing/manifold ring sits above the bells.
+  * **Chines (Block 3):** four quilted chines, clocked unevenly (details and sources under *v4.1* below).
+  * **Aft end:** a black triangular plate with the hazard placard, under a large access port. Both sit about 16° off the tower-side centreline, nearer one of the large chines, as in the aft photo.
+  * **Engines:** 33 rebuilt Raptor 3 engines (see *v4.1*). The inner 13 gimbal live from the sim; the outer 20 are fixed. The exposed Block 3 gas manifolds form a dense black ring above the engines.
   * **Live state:** frost bands follow the tank levels. Transparency mode shows the tanks and the sloshing liquids, clipped by the live slosh angles, plus the CG marker.
 * **Scene:**
   * Starbase-like scene: lattice tower with carriage, chopsticks (driven by `arm_gap`), QD arm, OLM and pad.
   * Sand, beach, surf and animated sea; sky dome that fades to black space with altitude; stars; time of day (day / morning / sunset / night).
   * Trajectory trail, re-entry plasma sheath, and steam/dust particles where the plume hits the ground, deck or water.
-* **Cameras:** follow, orbit (touch), chase, onboard, tower, ground, below, fins.
+* **Cameras:** follow, orbit (touch), chase, onboard, tower, ground, below, fins, overhead. The overhead camera looks straight down on the catch point, with +x (the sea) to the right. The tower camera now sits beside the tower top instead of inside the crane house.
 * **Quality presets:**
 
 | preset | DPR | anti-aliasing | bloom | shadows | particles | notes |
@@ -141,6 +141,82 @@ How well the models agree:
 * A "What changed vs baseline" panel.
 * v4-only tweaks: wind direction, gust direction, tower heading, crossrange, roll offset, stuck fin, SRP, landing-tank size, and others.
 * v4 charts: crossrange and tower offsets, attitude, fins, gimbal, and retro-propulsion. The summary shows offsets along c/e, roll error and peak roll rate.
+
+## v4.1: tower orientation, guidance fix, 4 chines, Raptor 3 rebuild
+
+### Catch tower rotated 90° toward the sea
+* **New default:** `tower_heading_deg` is now **90°** (it was 0°).
+  * Seen from above, the tower and chopsticks are turned **90° counter-clockwise** ("left").
+  * The arms now point along **+x**: downrange, toward the sea and the booster's return path.
+  * The tower stands 22 m behind the catch axis, on the land side (−x). The arms close along z.
+* **Presets:**
+  * "Tower arms crossrange (old 0° layout)" reproduces the previous layout.
+  * "Tower rotated 35° off the approach" now uses 125°.
+* `screenshots/v4_tower_rot_before_after.png` compares 0° and 90° with the overhead, tower and orbit cameras.
+* The 2D canvas view is unchanged. It is the planar v3 model, which always uses a 0° tower drawn face-on.
+
+### Guidance fixes needed by the new orientation
+* **Missing tilt limit (bug fix).** LANDING3 has a lateral-acceleration / tilt limit ("stand up straight for the last metres").
+  * A line-joining edit had left the limit inside a comment, so it never ran.
+  * Without it, the hover translation loop could command large tilts. Those saturated the gimbals (±15°) and caused a growing lateral oscillation.
+  * With the old 0° tower this was mostly hidden: the residual downrange error lay along the closing axis, where the arms tolerate several metres.
+  * With the arms along the approach, the downrange error must be removed before the arms close. The bug then broke the catch, so it is fixed.
+* **Arm closing gate.** The arms now wait until the velocity along the arms is small. They allow for motion toward the centre: `|v_e + 0.5·sign(d_e)·min(|d_e|,2)| < 0.9 m/s`.
+* **Hover-hold.** Hover-hold now also triggers if the along-arm speed is above 1.2 m/s.
+* **Centre engines.** The 6-DOF model and the engine map now use the Block 3 centre-engine clocking: 108° / 108° / 144° at r = 0.82 m. The v2/v3 planar models are unchanged, so the Python validation stays exact.
+* **Results at the new default:** see the scenario table under *Testing*.
+  * Baseline, 1 and 2 engines out, crosswind, roll offset and stuck side fin are all caught.
+  * Arriving along the arms costs about 7 t of extra landing propellant (13.5 t left instead of 20.3 t).
+  * As a result, "Heavy booster (+30 t dry)" now runs dry in the hover and hits the arms too fast. It is still caught with the 0° layout.
+
+### Block 3 chines: 4, unevenly clocked
+Sources:
+* NSF, "The Future of the Starship Program, Block 3 and Mars" (May 2025): the LOX tank has "a different chine setup for better glide back lift… spaced farther apart". It also gives the three grid fins in a T: port, starboard and the non-tower (heat-shield) side.
+* NSF, "Booster 18 suffers anomaly during proof testing" (Nov 2025): a COPV at the bottom of one of the larger chines failed.
+* B18 deep-dive video (Starbase coverage, 2025, youtube.com/watch?v=W3qbU0CllDQ): "still four chines, but two are considerably larger… the two larger chines are positioned closer together on the leeward side… the two smaller ones are located further apart either side of the new quick disconnect panels".
+* Wikipedia, "SpaceX Super Heavy": the chines hold COPVs, batteries and CO₂, and the fins are arranged 90/90/180.
+
+Clocking fitted to the user's reference photos:
+* **Rollout photo:** the belly fin faces the camera; one chine is on the left silhouette and one is on the right face at about +55°.
+* **Night photo:** two short chines and one taller chine are visible.
+* **Launch-mount photo:** the tops of the large chines are about 6 m higher.
+* **Aft photo:** the large chines are about 70° apart, with the placard off-centre between them.
+
+Model (body frame; azimuth measured from +X = fin A):
+| chines | azimuth | position | top | reach beyond the hull | width |
+|---|---|---|---|---|---|
+| 2 small | 18° and 162° | belly fin ±72° | 23.8 m | 1.1 m | 0.9 m |
+| 2 large (COPV) | 235° and 305° | tower side ±35° | 29.8 m | 1.5 m | 1.2 m |
+
+* The gaps going round are **144° / 73° / 70° / 73°**: the layout is mirror-symmetric about the belly-fin/tower plane, but the chines are not spaced evenly.
+* All four start at the aft skirt, with faceted wedge fairings, pointed tops and quilted thermal protection.
+* `screenshots/v4_chine_clocking_plan.png` shows the annotated plan view.
+* **Uncertainty:** each azimuth is roughly ±10–15°, from the perspective photos; no top-down image was found.
+  * Which pair flanks the quick-disconnect panels is inferred. The source text puts the small pair there; this model puts them on the belly-fin side and the large pair on the tower-facing side.
+  * The lengths are ±2 m.
+
+### Raptor 3 engines rebuilt
+* **Thrust chamber contour:** published Raptor sea-level nozzle data (FAA Starship PEA, Appendix G, table 1).
+  * throat radius 0.111 m
+  * downstream throat radius of curvature 0.033 m
+  * 32° wall angle at the tangency point, 6° lip angle
+  * exit Ø 1.301 m
+  * throat-to-exit length 1.526 m (area ratio ≈ 34)
+  * The bell is a Rao parabola (quadratic Bézier). Above the throat is a chamber of radius 0.235 m (contraction ≈ 4.5).
+* **Appearance:** no heat shroud, and very little external plumbing.
+  * SpaceX and Musk describe the engine as having "integral cooling circuits throughout… looks very simple on the outside" (spacelaunchlive.com/engines/raptor-3, wccftech).
+  * Construction Physics, "How SpaceX streamlined the Raptor engine", covers the same simplification.
+  * The model has a compact cylindrical powerhead (oxidiser turbopump + preburner) with two collars under a light-grey thrust puck.
+  * One side-mounted fuel turbopump has a single looping duct into the injector-head ring manifold.
+  * Below that come a slim regen-cooled chamber and narrow throat neck, then a smooth dark bell with one slim coolant manifold ring and a light-grey exit rim.
+  * This matches the StarshipGazer cluster photo.
+* **Layout (NSF, May 2025):**
+  * 3 centre engines clocked 108/108/144°, "no single engine directly hits the top of the ridge cap"
+  * 10 inner engines at r = 2.12 m (gimballed)
+  * 20 outer fixed engines at r = 3.95 m
+  * The rings are sized so the 1.30 m bells just clear each other.
+* **Uncertainty:** the FAA table is for the baseline Raptor nozzle. Raptor 3 is quoted as about 1.3 m × 2.8 m, with an expansion ratio near 34–40, so the bell is close but not exact. The powerhead shapes are approximations taken from photos.
+* `screenshots/v4_compare_chines_raptor3.png` holds 6 reference/render pairs plus the plan view. The main sheet `v4_compare_booster_refs.png` was re-rendered.
 
 ## Pre-flight only: no in-flight tinkering
 * Every tweakable is a pre-flight setting. Pressing LAUNCH locks the whole settings panel (it is greyed out, ignores pointer input, and Launch, Presets, Reset and Monte Carlo are disabled) for the length of the flight.
@@ -368,6 +444,17 @@ Details are in `tools/validation.json`.
 * `node tools/validate6.js` runs the v4 vs v3 validation table. `node tools/scen6.js [v4|v3] [regex]` runs every preset.
 * `node tools/v4shots.js [url]` runs Playwright with SwiftShader WebGL. It covers 6 scenarios through the UI, the camera set, transparency, the engine map, view options, and iPhone 13 / Pixel 7 emulation with an FPS measurement. It writes `screenshots/v4_*.png` and `screenshots/v4_results.json`.
 * `node tools/labshot.js` / `node tools/plumeshot.js` render the booster and plume comparison labs. `node tools/appcheck.js` loads the whole app and reports console errors.
+* `node tools/towershot.js` takes the tower-orientation before/after screenshots. `labshot.js "plan"` renders the axis-aligned plan view used for the chine clocking diagram.
+* **v4.1 scenario results** (`scen6.js v4`, default tower heading 90°):
+  * Caught: baseline, don't vent, 1 / 2 engines out in the landing burn, centre engine fails in hover-slam, 2 out in boostback, 2 relight failures, high AoA, entry burn, windy day, Raptor 3 at 250 tf, no lag compensation, sluggish arms, stuck side fin A (was a miss), crosswind (was tipped over), north-west wind, roll offset 40°, crossrange staging, tower 125°, tower 0°, hard start + gimbal stuck.
+  * Ocean splashdown and boostback abort end in soft splashdowns.
+  * Not caught:
+    * No landing tanks: flameout.
+    * Low propellant: out of propellant.
+    * Stuck belly fin: out of propellant.
+    * Small landing tank: out of propellant (was too fast onto the arms).
+    * Heavy booster: too fast onto the arms after running dry (was caught).
+  * The v2 model still matches Python exactly.
 * `node tools/scenarios.js`: about 30 scenarios headless, about 2 s each.
 * `node tools/v3check.js '{"vent_mode":"don\'t vent"}' "190,232,240"`: event log plus state probes.
 * `node tools/shots.js [url]`: Playwright at 1280×800. It runs baseline / 2-engines-out / high-AoA / don't-vent / no-landing-tanks, the lock test, compare, the share URL and Monte Carlo, and writes `screenshots/*.png` and `screenshots/results.json`.

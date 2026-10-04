@@ -351,7 +351,7 @@
         pos = new T.Vector3(1.6, 62, 4.5 + 1.6).applyMatrix4(B.matrixWorld);
         look = new T.Vector3(0.8, 0, 4.5 + 4.5).applyMatrix4(B.matrixWorld); fov = 70; up = Yb.clone();
       } else if (M === "tower") {
-        const tp = this.tower.position; pos = new T.Vector3(tp.x, 152, tp.z);
+        const tp = this.tower.position, eh = new T.Vector3(this.towerAxis.x - tp.x, 0, this.towerAxis.z - tp.z).normalize(); pos = new T.Vector3(tp.x - eh.z * 16, 152, tp.z + eh.x * 16).addScaledVector(eh, 2);   // beside the tower top (clear of the crane house), looking out along the arms
         const d = pos.distanceTo(mid); fov = clamp(2 * Math.atan(55 / d) / D2R, 2, 60);
       } else if (M === "ground") {   // beach-side spectator ~2.6 km from the catch axis (audio uses true distance/343 delays)
         pos = new T.Vector3(this.towerAxis.x - 1200, 2.0, this.towerAxis.z - 2300);
@@ -359,6 +359,9 @@
       } else if (M === "below") {    // from below / behind the engines (the "33 glowing engines" view)
         const side = new T.Vector3(1, 0, 0).applyQuaternion(B.quaternion);
         pos = B.position.clone().addScaledVector(Yb, -140).addScaledVector(side, 45); look = B.position.clone().addScaledVector(Yb, 20); fov = 40;
+      } else if (M === "overhead") {   // straight down on the catch point (+x = downrange / sea to the right, -z up)
+        pos = new T.Vector3(this.towerAxis.x, 420, this.towerAxis.z + 0.01); look = new T.Vector3(this.towerAxis.x, 60, this.towerAxis.z);
+        up = new T.Vector3(0, 0, -1); fov = 26;
       } else { pos = mid.clone().add(new T.Vector3(0, 20, -260)); }
       if (pos.y < 1.5) pos.y = 1.5;
       if (M === "onboard" || snap || !this._camInit) cam.position.copy(pos); else cam.position.lerp(pos, k);

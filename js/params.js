@@ -104,7 +104,7 @@
   // Tower
   add("Tower", "tower_x_m", "Catch point downrange (x)", 0, -300, 300, 5, "m", { v4: true });
   add("Tower", "tower_z_m", "Catch point crossrange (z)", 0, -300, 300, 5, "m", { v4: true });
-  add("Tower", "tower_heading_deg", "Tower heading (arm direction)", 0, -180, 180, 5, "°", { v4: true, help: "Rotates the tower/arms about the catch point; roll control re-aligns the pins" });
+  add("Tower", "tower_heading_deg", "Tower heading (arm direction)", 90, -180, 180, 5, "°", { v4: true, help: "Direction the chopstick arms point (0° = arms crossrange +z, 90° = arms toward the sea / downrange +x, the return direction). Roll control re-aligns the pins" });
   add("Tower", "arm_close_time_s", "Arm close time", 1.8, 0.6, 5, 0.1, "s");
   add("Tower", "arm_close_hp_m", "Arms start closing at pin height", 18, 5, 60, 1, "m", { v4: true });
   add("Tower", "k_arm_MN_per_m", "Rail stiffness", 30, 5, 120, 1, "MN/m");
@@ -143,7 +143,8 @@
     "Wind from the north-west (135°)": { wind_dir_deg: 135, U10_wind_mps: 10, jet_peak_mps: 40 },
     "Roll offset 40° at entry": { roll_offset_deg: 40 },
     "Crossrange staging (+3 km)": { stage_crossrange_km: 3 },
-    "Tower rotated 35°": { tower_heading_deg: 35 },
+    "Tower rotated 35° off the approach": { tower_heading_deg: 125 },
+    "Tower arms crossrange (old 0° layout)": { tower_heading_deg: 0 },
     "Ocean splashdown": { mission: "ocean" },
     "Boostback abort → ocean (3 out)": { mission: "rtls_abort", bb_fail_n: 3, bb_fail_t: 6 },
     "Hard start + gimbal stuck (map)": { eng_fail: "4:hard:228:0;7:gimbal:229:6" },
