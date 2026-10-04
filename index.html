@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Super Heavy Catch Simulator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="Super Heavy booster return-to-launch-site and chopstick catch simulator (Block 3, v3 physics).">
+<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="vendor/uPlot.min.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header>
+  <div class="brand">SUPER HEAVY <span>RTLS · CHOPSTICK CATCH SIMULATOR</span></div>
+  <button id="btnDrawer" class="mob" aria-label="Open flight settings">⚙ Setup</button>
+  <div class="hdr-right"><span id="modelTag"></span><a href="README.md" target="_blank" rel="noopener">README</a></div>
+</header>
+<div id="app">
+  <div id="scrim"></div>
+  <aside id="side" aria-label="Flight settings">
+    <div class="drawer-head mob"><span class="grab"></span><b>Flight settings</b><button id="drawerClose" aria-label="Close settings">✕</button></div>
+    <div class="side-top">
+      <select id="preset"><option value="">Presets…</option></select>
+      <button id="btnReset" title="Reset every setting to the default baseline">Reset</button>
+    </div>
+    <div id="lockBanner" class="hidden">🔒 PRE-FLIGHT SETTINGS LOCKED — flight in progress.<br><small>Playback controls stay live. End the flight to change settings.</small></div>
+    <div id="staleBanner" class="hidden">Settings changed since the last flight — results below belong to the previous configuration. Launch a fresh run.</div>
+    <div id="panel"></div>
+    <div class="side-bottom">
+      <button id="btnLaunch" class="primary">▶ LAUNCH</button>
+      <button id="btnEnd" class="hidden">■ END FLIGHT</button>
+      <div class="row2">
+        <button id="btnShare" title="Copy a URL encoding these settings">Copy share link</button>
+        <button id="btnPin" title="Keep this run as a reference for comparison" disabled>Pin as reference</button>
+      </div>
+      <div class="row2">
+        <select id="mcN"><option>10</option><option selected>20</option><option>50</option></select>
+        <button id="btnMC" title="Monte Carlo: random seeds + environment dispersions">Monte Carlo</button>
+      </div>
+    </div>
+  </aside>
+  <main>
+    <div id="viewWrap">
+      <canvas id="view"></canvas>
+      <div id="busy" class="hidden"><div class="spin"></div><div id="busyTxt">Simulating…</div><div class="pbar"><div id="busyBar"></div></div></div>
+      <div id="outcome" class="hidden"></div>
+      <div id="intro"><span class="desk">Choose the pre-flight configuration on the left, then press <b>LAUNCH</b>.</span><span class="mob">Tap <b>⚙ Setup</b> to choose the configuration, then <b>LAUNCH</b>.</span><br><small>All settings are fixed before launch; the flight is simulated fresh from that configuration.</small><br><button id="introSetup" class="mob primary">⚙ Open setup</button></div>
+    </div>
+    <div id="controls">
+      <button id="btnLaunch2" class="mob primary">▶ LAUNCH</button>
+      <button id="btnPlay" disabled aria-label="Play / pause">❚❚</button>
+      <input id="scrub" type="range" min="0" max="1000" value="0" step="1" disabled>
+      <span id="tlabel">T+0.0 s</span>
+      <label>Speed <select id="speed"><option value="auto" selected>Auto</option><option>0.5</option><option>1</option><option>2</option><option>5</option><option>10</option><option>20</option></select></label>
+      <label>Camera <select id="camera"><option value="follow">Follow</option><option value="wide">Wide</option><option value="close">Close-up</option><option value="tanks">Tanks (internals)</option><option value="fins">Grid-fin close-up</option></select></label>
+      <label class="chk"><input type="checkbox" id="transp"> Transparent</label>
+      <label class="chk"><input type="checkbox" id="sound"> Sound</label>
+    </div>
+    <div id="lower">
+      <div id="lowerRow"><div id="summary"></div><div id="charts"></div></div>
+      <div id="mc" class="hidden"></div>
+    </div>
+  </main>
+</div>
+<script src="vendor/uPlot.iife.min.js"></script>
+<script src="js/params.js"></script>
+<script src="js/physics.js"></script>
+<script src="js/guidance.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/render.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>
