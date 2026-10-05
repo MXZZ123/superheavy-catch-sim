@@ -172,8 +172,12 @@
       const c = this.ctx, k = this.k, p = this.run.p, X = x => this.sx(x), Y = y => this.sy(y);
       if (X(-40) > this.W + 50 || X(40) < -50 || Y(TOWER_H + 25) > this.H + 50) return;
       const lw = clamp(0.25 * k, 0.4, 3), armTop = p.arm_top_m, gap = S.arm_gap;
+      // v4.2: honour tower_heading so the 2D view matches the 3D Mechazilla orientation (default 90° = arms toward +x / sea).
+      // When heading is near 90°/270° the tower sits behind the booster along -x and the arms extend toward the camera-plane origin along +x, so we draw the tower offset to the left and the arms reaching rightward to ±gap.
+      const hdg = (p.tower_hdg || 0), alongX = Math.abs(Math.sin(hdg));   // 1 when arms point ±x
+      const twX = -22 * alongX;   // tower centreline offset in the 2D plane (metres)
       if (!front) {
-        const x0 = -9, x1 = 9;
+        const x0 = twX - 9, x1 = twX + 9;
         // tower body silhouette & lattice
         c.fillStyle = "rgba(12,16,22,0.93)"; c.fillRect(X(x0), Y(TOWER_H), (x1 - x0) * k, TOWER_H * k);
         const bay = 9;
@@ -231,7 +235,10 @@
         // chopstick arms: truss box beams with catch rails, bumpers and actuators
         const armH = 5;
         for (const sg of [-1, 1]) {
-          const xi = sg * gap, xo = sg * (gap + ARM_LEN), xa = Math.min(xi, xo), xb2 = Math.max(xi, xo);
+          // closed/open gap measured from catch axis; with heading 90° the tower is at twX and arms reach across to ±gap
+          const xi = alongX > 0.5 ? (sg * gap) : (sg * gap);
+          const xo = alongX > 0.5 ? (twX + 5) : (sg * (gap + ARM_LEN));
+          const xa = Math.min(xi, xo), xb2 = Math.max(xi, xo);
           c.fillStyle = "rgba(48,58,72,0.96)"; c.fillRect(X(xa), Y(armTop), (xb2 - xa) * k, armH * k);
           c.strokeStyle = "#8795a7"; c.lineWidth = lw;
           c.beginPath(); const nb = 10;

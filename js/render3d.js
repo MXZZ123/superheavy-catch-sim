@@ -17,33 +17,7 @@
   SH.autoQuality = () => (window.matchMedia && (window.matchMedia("(pointer: coarse)").matches || window.matchMedia("(max-width: 820px)").matches)) ? "low" : "medium";
   const TOD = { day: { elev: 50, az: 120, tod: 1.0 }, morning: { elev: 14, az: 95, tod: 0.65 }, sunset: { elev: 3, az: 255, tod: 0.3 }, night: { elev: -12, az: 300, tod: 0.0 } };
 
-  // ---------------------------------------------------------------- tower, chopsticks, OLM
-  function lattice(H, w, sec, detail, merge) {
-    const gs = [], leg = 1.1, br = 0.35;
-    const box = (sx, sy, sz, x, y, z) => { const g = new T.BoxGeometry(sx, sy, sz); g.translate(x, y, z); return g; };
-    const bar = (a, b, r) => { const va = new T.Vector3(...a), vb = new T.Vector3(...b), d = vb.clone().sub(va), L = d.length(); const g = new T.BoxGeometry(r, L, r); g.translate(0, L / 2, 0); g.applyQuaternion(new T.Quaternion().setFromUnitVectors(new T.Vector3(0, 1, 0), d.normalize())); g.translate(va.x, va.y, va.z); return g; };
-    const h = w / 2;
-    for (const [x, z] of [[-h, -h], [h, -h], [h, h], [-h, h]]) gs.push(box(leg, H, leg, x, H / 2, z));
-    for (let y = 0; y < H; y += sec) {
-      const y1 = Math.min(y + sec, H);
-      const C = [[-h, -h], [h, -h], [h, h], [-h, h]];
-      for (let k = 0; k < 4; k++) {
-        const [ax, az] = C[k], [bx, bz] = C[(k + 1) % 4];
-        gs.push(bar([ax, y1, az], [bx, y1, bz], br * 1.4));
-        if (detail) { gs.push(bar([ax, y, az], [bx, y1, bz], br)); gs.push(bar([bx, y, bz], [ax, y1, az], br)); }
-        else gs.push(bar([ax, y, az], [bx, y1, bz], br));
-      }
-    }
-    return merge(gs);
-  }
-  function truss(Lx, Hy, Wz, n, merge) {    // box truss along +X (chopstick arm)
-    const gs = [], r = 0.3, bar = (a, b) => { const va = new T.Vector3(...a), vb = new T.Vector3(...b), d = vb.clone().sub(va), L = d.length(); const g = new T.BoxGeometry(r, L, r); g.translate(0, L / 2, 0); g.applyQuaternion(new T.Quaternion().setFromUnitVectors(new T.Vector3(0, 1, 0), d.normalize())); g.translate(va.x, va.y, va.z); return g; };
-    for (const y of [0, Hy]) for (const z of [-Wz / 2, Wz / 2]) gs.push(bar([0, y, z], [Lx, y, z]));
-    for (let i = 0; i <= n; i++) { const x = i / n * Lx; gs.push(bar([x, 0, -Wz / 2], [x, Hy, -Wz / 2]), bar([x, 0, Wz / 2], [x, Hy, Wz / 2]), bar([x, Hy, -Wz / 2], [x, Hy, Wz / 2]), bar([x, 0, -Wz / 2], [x, 0, Wz / 2])); if (i < n) { const x2 = (i + 1) / n * Lx; gs.push(bar([x, 0, -Wz / 2], [x2, Hy, -Wz / 2]), bar([x, 0, Wz / 2], [x2, Hy, Wz / 2])); } }
-    const rail = new T.BoxGeometry(Lx * 0.55, 0.5, 1.0); rail.translate(Lx * 0.7, Hy + 0.25, 0); gs.push(rail);   // catch rail on top
-    return merge(gs);
-  }
-
+  // ---------------------------------------------------------------- tower / chopsticks / OLM live in js/tower3d.js (SH.buildMechazilla, SH.buildOLM)
   class Renderer3D {
     constructor(wrap, quality) {
       this.wrap = wrap; this.mode = "follow"; this.transparent = false; this.run = null; this.ref = null; this.tod = "day";
@@ -129,26 +103,13 @@
       const beach = new T.Mesh(new T.PlaneGeometry(90, 80000), new T.MeshStandardMaterial({ color: 0xd8cba6, roughness: 0.9 })); beach.rotation.x = -Math.PI / 2; beach.position.set(605, 0.02, 0); S.add(beach);
       const surf = new T.Mesh(new T.PlaneGeometry(14, 80000), new T.MeshBasicMaterial({ color: 0xf2f6f8, transparent: true, opacity: 0.6 })); surf.rotation.x = -Math.PI / 2; surf.position.set(660, 0.05, 0); S.add(surf); this.surf = surf;
       S.fog = new T.FogExp2(0xc8d4e0, 1 / 25000);
-      // tower assembly (positioned per run)
-      const tw = this.tower = new T.Group(); S.add(tw);
-      const steel = new T.MeshStandardMaterial({ color: 0x5f656c, metalness: 0.75, roughness: 0.55 });
-      const steelL = new T.MeshStandardMaterial({ color: 0x8a9096, metalness: 0.8, roughness: 0.45 });
-      const concrete = new T.MeshStandardMaterial({ color: 0x9c9a94, roughness: 0.9 });
-      const latt = new T.Mesh(lattice(146, 10, 9, this.Q.towerDetail, merge), steel); latt.castShadow = true; tw.add(latt); this.towerLatt = latt;
-      const top = new T.Mesh(new T.BoxGeometry(12, 3, 12), steel); top.position.y = 147.5; tw.add(top);
-      const pad = new T.Mesh(new T.CylinderGeometry(70, 70, 0.4, 48), concrete); pad.position.y = 0.2; pad.receiveShadow = true; this.scene.add(pad); this.pad = pad;
-      // carriage + chopsticks (arms pivot about vertical hinges on the tower face, extend toward +X = tower e-axis)
-      const car = this.carriage = new T.Group(); tw.add(car);
-      const carBox = new T.Mesh(new T.BoxGeometry(13, 9, 13), steelL); carBox.position.y = -4; car.add(carBox);
-      const armG = truss(38, 4.0, 2.6, 10, merge); this.arms = [];
-      for (const s of [-1, 1]) { const hinge = new T.Group(); hinge.position.set(5.2, -4.2, s * 4.6); const arm = new T.Mesh(armG, steelL); arm.castShadow = true; arm.position.set(0, 0, 0); hinge.add(arm); car.add(hinge); this.arms.push({ hinge, s }); }
-      // ship QD arm (retracted) near the top, booster QD + launch mount at the catch axis
-      const qd = new T.Mesh(truss(22, 3, 3, 6, merge), steel); qd.position.set(5, 130, -2); qd.rotation.y = 1.2; tw.add(qd);
-      const olm = this.olm = new T.Group(); S.add(olm);
-      const ring = new T.Mesh(new T.CylinderGeometry(8.5, 8.5, 3.2, 40, 1, true), steelL); ring.position.y = 20; olm.add(ring);
-      const deck = new T.Mesh(new T.RingGeometry(5.2, 9.5, 40), steel); deck.rotation.x = -Math.PI / 2; deck.position.y = 21.6; olm.add(deck);
-      for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; const leg = new T.Mesh(new T.BoxGeometry(2.2, 20, 2.2), concrete); leg.position.set(9 * Math.cos(a), 10, 9 * Math.sin(a)); leg.castShadow = true; olm.add(leg); }
-      const bqd = new T.Mesh(new T.BoxGeometry(6, 3, 3), steel); bqd.position.set(-8, 24, 0); olm.add(bqd);
+      // tower assembly (Mechazilla remodel — OLIT lattice, carriage, triangular chopsticks, ship QD, OLM)
+      const mech = SH.buildMechazilla(this.Q.towerDetail);
+      this.tower = mech.root; S.add(this.tower);
+      this.carriage = mech.carriage; this.arms = mech.arms; this.shipQD = mech.qd;
+      this.towerLatt = mech.root;   // keep a handle for any legacy references
+      const pad = new T.Mesh(new T.CylinderGeometry(70, 70, 0.4, 48), new T.MeshStandardMaterial({ color: 0x9c9a94, roughness: 0.9 })); pad.position.y = 0.2; pad.receiveShadow = true; S.add(pad); this.pad = pad;
+      this.olm = SH.buildOLM(this.Q.towerDetail); S.add(this.olm);
       // trail
       this.trailGeo = new T.BufferGeometry(); this.trailGeo.setAttribute("position", new T.BufferAttribute(new Float32Array(3 * 4000), 3));
       this.trail = new T.Line(this.trailGeo, new T.LineBasicMaterial({ color: 0x9fd4ff, transparent: true, opacity: 0.55 })); this.trail.frustumCulled = false; S.add(this.trail);
@@ -209,7 +170,7 @@
       const hd = v4 ? (p.tower_hdg || 0) : 0, ex = [Math.sin(hd), 0, Math.cos(hd)];
       const tx = v4 ? (p.tower_x_m || 0) : 0, tz = v4 ? (p.tower_z_m || 0) : 0;
       this.towerAxis = new T.Vector3(tx, 0, tz);
-      const back = 22;
+      const back = (SH.MECH && SH.MECH.TOWER_BACK) || 22;
       this.tower.position.set(tx - ex[0] * back, 0, tz - ex[2] * back);
       this.tower.rotation.y = Math.atan2(-ex[2], ex[0]);   // local +X -> e
       this.carriage.position.y = p.arm_top_m || 125;
@@ -225,7 +186,7 @@
         const S0 = { fin0: 0, fin1: 0, fin2: 0, gx: 0, gz: 0, spool: new Array(33).fill(0), thr: 0, lox_h: 0, ch4_h: 0, loxL_h: 0, q: 0 };
         this.idle.update(S0, 0); this.idle.group.position.set(this.towerAxis.x, (p.arm_top_m || 125) - (p.l_pins_m || 66), this.towerAxis.z);
         this.idle.group.rotation.y = -(p.tower_hdg || 0);
-        this.arms.forEach(a => { a.hinge.rotation.y = -a.s * Math.atan2(4.9 + 1.3 - 4.6, 16.8); });
+        this.arms.forEach(a => { const M = SH.MECH; a.hinge.rotation.y = -a.s * Math.atan2(4.9 + M.ARM_W / 2 - M.HINGE_Z, M.TOWER_BACK - M.HINGE_X); });
         this.idleCamA = 0;
       }
       if (this.booster) this.booster.group.visible = false;
@@ -282,9 +243,10 @@
       this._hud(S, t);
     }
     _chopsticks(S) {
-      // gap = sim arm_gap (distance from the catch axis to each arm's inner face); arms hinge 4.6 m off the tower centreline
-      const de0 = 22 - 5.2, w = 2.6, gap = S.arm_gap || 14;
-      for (const a of this.arms) { const ang = Math.atan2(gap + w / 2 - 4.6, de0); a.hinge.rotation.y = -a.s * ang; }
+      // gap = sim arm_gap (distance from the catch axis to each arm's inner face).  Hitch geometry matches SH.MECH
+      // so the visual mesh and the 6-DOF catch stay aligned after the Mechazilla remodel.
+      const M = SH.MECH, de0 = M.TOWER_BACK - M.HINGE_X, w = M.ARM_W, gap = S.arm_gap || 14;
+      for (const a of this.arms) { const ang = Math.atan2(gap + w / 2 - M.HINGE_Z, de0); a.hinge.rotation.y = -a.s * ang; }
     }
     _plasma(S, t) {
       const hN = clamp((S.heat || 0) / this.heatMax, 0, 1), on = S.vy < 0 && (S.M || 0) > 1.2 && S.yb > 8000;

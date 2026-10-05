@@ -93,7 +93,7 @@ How well the models agree:
   * **Engines:** 33 rebuilt Raptor 3 engines (see *v4.1*). The inner 13 gimbal live from the sim; the outer 20 are fixed. The exposed Block 3 gas manifolds form a dense black ring above the engines.
   * **Live state:** frost bands follow the tank levels. Transparency mode shows the tanks and the sloshing liquids, clipped by the live slosh angles, plus the CG marker.
 * **Scene:**
-  * Starbase-like scene: lattice tower with carriage, chopsticks (driven by `arm_gap`), QD arm, OLM and pad.
+  * Starbase Mechazilla remodel (`js/tower3d.js`): light-grey OLIT lattice with hex crown, dark carriage on face rails, triangular tubular chopsticks with walkways / lift rails / tip stabilizers / load pins, ship QD arm, Pad-1 OLM + booster QD. Driven by `arm_gap`. See *v4.2*.
   * Sand, beach, surf and animated sea; sky dome that fades to black space with altitude; stars; time of day (day / morning / sunset / night).
   * Trajectory trail, re-entry plasma sheath, and steam/dust particles where the plume hits the ground, deck or water.
 * **Cameras:** follow, orbit (touch), chase, onboard, tower, ground, below, fins, overhead. The overhead camera looks straight down on the catch point, with +x (the sea) to the right. The tower camera now sits beside the tower top instead of inside the crane house.
@@ -217,6 +217,44 @@ Model (body frame; azimuth measured from +X = fin A):
   * The rings are sized so the 1.30 m bells just clear each other.
 * **Uncertainty:** the FAA table is for the baseline Raptor nozzle. Raptor 3 is quoted as about 1.3 m × 2.8 m, with an expansion ratio near 34–40, so the bell is close but not exact. The powerhead shapes are approximations taken from photos.
 * `screenshots/v4_compare_chines_raptor3.png` holds 6 reference/render pairs plus the plan view. The main sheet `v4_compare_booster_refs.png` was re-rendered.
+
+
+## v4.2: Mechazilla remodel (tower, chopsticks, ship QD)
+
+The catch tower was still a crude box-truss next to the detailed booster. v4.2 rebuilds it to the same fidelity bar.
+
+### What changed visually
+* **OLIT lattice** — light grey / off-white, ~10×10 m section, 146.3 m tall, bay bracing, face rails the carriage rides, hexagonal top platform with railings, pulley/drawworks house and antennas.
+* **Carriage** — dark near-black spine wrapping the tower face, shared upper/lower pivot pins, 12 skates on three rails (Ryan Hansen), hydraulic packs and the large arm-open actuators.
+* **Chopsticks** — triangular *tubular* truss (~36 m, OLIT-1 length), tapering to the tip, walkway + railings on top, blue joint wraps, raised upper **lift / landing rail** (~0.5 m × 20 m with parallel-motion linkages and foam bumper pads), **vertical stabilizer** hanging from each tip, silver **lower load-point pin + locking pin** on the lower inner face.
+* **Ship QD arm** — lattice boom on the tower at ~106 m, stowed ~55° off the catch axis, tip with QD hood/plate, white contact pads and stacking claws/grippers (Pad 1 style).
+* **OLM** — Pad 1 donut ring on six legs, hold-down stubs, single booster QD hood on the tower-facing side.
+* **Colours** — light tower vs near-black arms/carriage, matching the user refs and NSF daylight shots.
+* Hitch points (`SH.MECH`) are unchanged, so the 6-DOF catch still lines up with the mesh. Default tower heading stays **90°** (arms toward the sea).
+* **2D canvas** now offsets the tower by −22 m when the heading is near 90°, so the planar view is no longer stuck on the old face-on 0° layout.
+
+### Sources
+* User refs (6 photos): tip callouts (lift rail / stabilizer / load pin), night arm lattice + walkway, daylight ship-in-chopsticks, NSF carriage/tower-top (Gage / Rough Riders Show), dusk booster + open arms, sunset stack with ship QD swung out.
+* Ryan Hansen Space, *How SpaceX Will Catch Super Heavy* (transcript): carriage 12 skates / 3 rails, shared pivot pins, raisable landing rails ~0.5×20 m on parallel-motion linkages with pistons + gas springs, foam pads, booster load-point cylinders ~17 cm.
+* Teslarati / ilovetesla: OLIT-1 arms ~36 m tip-to-tower; carriage + cable/drawworks.
+* Starship-SpaceX fandom / NSF: chopsticks for stack + catch; triangular lower stabilizers for stacking; OLIT-1 taller arms than Pad 2 / 39A.
+* LunarCaveman SQD deep dive (via r/SpaceXLounge): Ship QD deploys/retracts ~60°, ~17 m clearance; white pads; claws that can hold booster upper load pins; QD plate for commodities.
+* NSF Pad 1 / Pad 2 articles: Pad 1 single BQD on the mount; Ship QD on the tower (Pad 1 original later scrapped in 2026 retrofit — this model keeps the classic Pad 1 SQD the user photos show).
+* Wikipedia / spacelaunchlive: tower ~146 m.
+
+### Uncertainty (±)
+* Exact triangular cross-section proportions and taper: ±15% from photos (no public drawing).
+* Lift-rail stroke and linkage geometry: simplified from Ryan Hansen’s description.
+* Ship QD stowed angle and exact mount height: ±10° / ±5 m.
+* Scaffolding is a light hint only (present in some refs, absent in catch ops).
+* Pad 2 / shorter-arm differences are intentionally **not** modelled — this is Pad 1 / OLIT-1 as in the user’s photos.
+
+### Screenshots
+* `screenshots/v4_compare_tower_refs.png` — 6 user refs vs matching simulator angles.
+* `screenshots/v4_tower_callout_tip.png` — tip labels (lift rail / stabilizer / load pin).
+* `screenshots/v4_tower_remodel_anatomy.png` — carriage, arms, ship QD.
+* Lab: `node tools/labtower.js` → `screenshots/lab_tower_*.png`.
+
 
 ## Pre-flight only: no in-flight tinkering
 * Every tweakable is a pre-flight setting. Pressing LAUNCH locks the whole settings panel (it is greyed out, ignores pointer input, and Launch, Presets, Reset and Monte Carlo are disabled) for the length of the flight.
