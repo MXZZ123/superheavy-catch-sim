@@ -93,7 +93,7 @@ How well the models agree:
   * **Engines:** 33 rebuilt Raptor 3 engines (see *v4.1*). The inner 13 gimbal live from the sim; the outer 20 are fixed. The exposed Block 3 gas manifolds form a dense black ring above the engines.
   * **Live state:** frost bands follow the tank levels. Transparency mode shows the tanks and the sloshing liquids, clipped by the live slosh angles, plus the CG marker.
 * **Scene:**
-  * Starbase Mechazilla remodel (`js/tower3d.js`): light-grey OLIT lattice with hex crown, dark carriage on face rails, triangular tubular chopsticks with walkways / lift rails / tip stabilizers / load pins, ship QD arm, Pad-1 OLM + booster QD. Driven by `arm_gap`. See *v4.2*.
+  * Starbase Mechazilla remodel (`js/tower3d.js`): dense lattice-within-lattice chopsticks, mechanical carriage with skates, weathered grey OLIT, tip lift-rail/stabilizer/load-pin, ship QD boom. Driven by `arm_gap`. See *v4.3*.
   * Sand, beach, surf and animated sea; sky dome that fades to black space with altitude; stars; time of day (day / morning / sunset / night).
   * Trajectory trail, re-entry plasma sheath, and steam/dust particles where the plume hits the ground, deck or water.
 * **Cameras:** follow, orbit (touch), chase, onboard, tower, ground, below, fins, overhead. The overhead camera looks straight down on the catch point, with +x (the sea) to the right. The tower camera now sits beside the tower top instead of inside the crane house.
@@ -255,6 +255,34 @@ The catch tower was still a crude box-truss next to the detailed booster. v4.2 r
 * `screenshots/v4_tower_remodel_anatomy.png` — carriage, arms, ship QD.
 * Lab: `node tools/labtower.js` → `screenshots/lab_tower_*.png`.
 
+
+
+
+## v4.3: Mechazilla density pass (same machine, not CAD placeholder)
+
+User feedback on v4.2: arms still read as sparse low-poly CAD; tip interface was decorative; carriage was a black box; tower glowed thin white; ship QD was a Lego stub. v4.3 rebuilds density to photo level while keeping hitch kinematics.
+
+### What changed
+* **Chopsticks** — ~26 bays, primary X + mid-bay K + tertiary zig-zag braces (lattice-within-lattice), thicker chords (Ø~0.76 m), secondary longitudinals, gusset plates, denser blue wraps, white tip wraps, cable trays + hydraulic runs, walkway grating ribs.
+* **Tip interface** — dark steel lift / landing rail (not a white slab) with parallel-motion linkages, foam pads, chrome lift rods; hanging vertical stabilizer from the lower chord with diagonal brace; larger silver load-point pin + locking pin + turnbuckle tension rod.
+* **Carriage** — open beam spine/ribcage, triple skate rows on 3 rails with roller packs + guide flanges, hydraulic packs, scaffolding decks, arms actuators.
+* **OLIT** — darker weathered grey (not glowing white), thicker legs (~Ø1.4 m), denser 6.8 m bays with secondary K braces, face rails, vertical conduits, work platforms, cluttered hex crown.
+* **Ship QD** — 14-bay tapering lattice boom with mid-bay rings, piping cluster, white pads, claws, QD hood stack.
+* **Materials** — darker metal response on arms; pin slightly emissive so it reads against black steel; merged geometries + shared cylinder prototypes for SwiftShader FPS.
+* Hitch (`SH.MECH`) unchanged — baseline still CAUGHT.
+
+### Remaining gaps (honest)
+* No baked AO / SSAO; contact shadows are lighting-only.
+* No weathered albedo textures or bolt/weld decals — still shaded primitives.
+* Cylinder segments kept moderate (6–12) for FPS; close-ups can still show faceting.
+* Scaffolding / cable clutter is representative, not a 1:1 survey of every hose.
+* Lift-rail stroke animation not modelled (static raised pose).
+
+### Screenshots
+* `screenshots/v4_compare_tower_refs.png` — tip / carriage / tower+SQD REF vs SIM.
+* `screenshots/v4_tower_callout_tip.png` — tip photo vs tipclose.
+* `screenshots/v4_tower_density_proof.png` — tip / carriage / QD density side-by-sides.
+* Lab: `node tools/labtower.js tips,tipclose,carclose,qd,...`
 
 ## Pre-flight only: no in-flight tinkering
 * Every tweakable is a pre-flight setting. Pressing LAUNCH locks the whole settings panel (it is greyed out, ignores pointer input, and Launch, Presets, Reset and Monte Carlo are disabled) for the length of the flight.
